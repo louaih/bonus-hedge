@@ -10,6 +10,9 @@ This tool helps you maximize the value of sportsbook bonus bets (also called fre
 - Identifies opportunities where you can place a bonus bet on one book and hedge it on another
 - Calculates guaranteed profit and efficiency for each opportunity
 
+## [Here's proof of it working](https://docs.google.com/spreadsheets/d/1iiVInLEaCCOvZZkHrFUrqcXIQZiTEjPqjcVDeYjGgiM/edit?usp=sharing)
+
+
 ## Installation
 
 ### Prerequisites
@@ -34,14 +37,23 @@ pip install requests
 
 ### Basic Example
 
+#### Input
 ```bash
-python main.py \
-  --api-key YOUR_API_KEY \
-  --bonus-book ballybet \
-  --books fanduel,draftkings,betmgm,betrivers \
-  --sports nba,ncaab \
-  --stake 250
-  --min-eff 0.6
+python3 main.py \
+    --api-key YOUR_API_KEY \
+    --bonus-book fanduel \
+    --books draftkings \
+    --sports nba \
+    --stake 250
+```
+### Output
+```
+Event: Dallas Mavericks @ Los Angeles Lakers
+Bonus: fanduel | Dallas Mavericks @ +260
+Hedge: draftkings | Los Angeles Lakers @ -305
+Hedge stake: $489.51
+Locked profit: $160.49
+Efficiency: 64.20%
 ```
 
 ### Parameters
@@ -81,21 +93,6 @@ python main.py \
 - `mlb` - MLB Baseball
 - `nhl` - NHL Hockey
 - `eurobasketball` - Euroleague Basketball
-
-## Example Input
-```
- python .\main.py --api-key YOUR_API_KEY --stake 10 --bonus-book ballybet --sports nba,ncaab,ncaaf,nhl --books fanduel,draftkings,betmgm,betrivers,ballybet,espnbet
-```
-## Example Output
-
-```
-Event: Milwaukee Bucks @ Oklahoma City Thunder
-Bonus: ballybet | Milwaukee Bucks @ +525
-Hedge: fanduel | Oklahoma City Thunder @ -600
-Hedge stake: $45.00
-Locked profit: $7.50
-Efficiency: 75.00%
-```
 
 ## How It Works
 
@@ -153,7 +150,7 @@ This is helpful for troubleshooting or understanding why certain opportunities w
 
 ⚠️ **Disclaimer**: **PROFIT CALCULATIONS APPLY TO BONUS BETS ONLY!!!!!! NOT CASH BETS!!!** This tool is for educational purposes ONLY. Always verify odds manually before placing bets. Odds can change between when the tool fetches them and when you place your bets.
 
-⚠️ **Responsible Gaming**: Only use bonus bets you've legitimately earned. Follow all terms and conditions of your sportsbooks. Bet responsibly.
+⚠️ **Responsible Gaming**: Follow all terms and conditions of your sportsbooks. Bet responsibly.
 
 ⚠️ **API Costs**: The Odds API has a free tier with limited requests. Each run of this tool uses API calls based on the number of sports and regions queried.
 
