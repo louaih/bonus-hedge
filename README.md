@@ -4,21 +4,11 @@ A Python tool to find optimal bonus bet hedging opportunities across multiple sp
 
 ## What It Does
 
-This tool helps you maximize the value of sportsbook bonus bets (also called free bets or risk-free bets) by finding the best hedging opportunities. It:
+This tool helps you maximize the value of sportsbook bonus bets (also called free bets, risk-free bets, or second-chance bets) by finding the best hedging opportunities. It:
 
 - Fetches live odds from multiple sportsbooks
 - Identifies opportunities where you can place a bonus bet on one book and hedge it on another
 - Calculates guaranteed profit and efficiency for each opportunity
-- Handles both US and US2 region sportsbooks automatically
-
-## Features
-
-- ✅ **Multi-region support** - Automatically queries both US and US2 regions when needed
-- ✅ **Real-time odds** - Fetches current odds from The Odds API
-- ✅ **Multiple sports** - Supports NBA, NCAAB, NFL, MLB, NHL, ATP, WTA
-- ✅ **Customizable filters** - Set minimum efficiency thresholds
-- ✅ **Clean output** - Formatted console display with all key information
-- ✅ **Debug logging** - Detailed logs saved to `debug.log` for troubleshooting
 
 ## Installation
 
@@ -31,8 +21,8 @@ This tool helps you maximize the value of sportsbook bonus bets (also called fre
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/louaih/bonus-hedge-finder.git
-cd bonus-hedge-finder
+git clone https://github.com/louaih/bonus-hedge.git
+cd bonus-hedge
 ```
 
 2. Install required packages:
@@ -45,24 +35,25 @@ pip install requests
 ### Basic Example
 
 ```bash
-python bonus_hedge_finder.py \
+python main.py \
   --api-key YOUR_API_KEY \
   --bonus-book ballybet \
   --books fanduel,draftkings,betmgm,betrivers \
   --sports nba,ncaab \
   --stake 250
+  --min-eff 0.6
 ```
 
 ### Parameters
 
 | Parameter | Required | Description | Default |
 |-----------|----------|-------------|---------|
-| `--api-key` | Yes | Your The Odds API key | - |
-| `--bonus-book` | Yes | Sportsbook where you have the bonus bet | - |
-| `--books` | Yes | Comma-separated list of books to hedge on | - |
-| `--sports` | No | Comma-separated list of sports to check | `nba,ncaab` |
-| `--stake` | No | Bonus bet amount in dollars | `250` |
-| `--min-eff` | No | Minimum efficiency threshold (0.0 to 1.0) | `0.0` |
+| `--api-key` | ✅ | Your The Odds API key | - |
+| `--bonus-book` | ✅ | Sportsbook where you have the bonus bet | - |
+| `--books` | ✅ | Comma-separated list of books to hedge on | - |
+| `--sports` | ❌ | Comma-separated list of sports to check | `nba,ncaab` |
+| `--stake` | ❌| Bonus bet amount in dollars | `250` |
+| `--min-eff` | ❌ | Minimum efficiency threshold (0.0 to 1.0) | `0.0` |
 
 ### Supported Sportsbooks
 
@@ -85,11 +76,11 @@ python bonus_hedge_finder.py \
 
 - `nba` - NBA Basketball
 - `ncaab` - NCAA Basketball
+- `ncaaf` - NCAA Football
 - `nfl` - NFL Football
 - `mlb` - MLB Baseball
 - `nhl` - NHL Hockey
-- `atp` - ATP Tennis
-- `wta` - WTA Tennis
+- `eurobasketball` - Euroleague Basketball
 
 ## Example Input
 ```
@@ -160,7 +151,7 @@ This is helpful for troubleshooting or understanding why certain opportunities w
 
 ## Important Notes
 
-⚠️ **Disclaimer**: This tool is for educational purposes. Always verify odds manually before placing bets. Odds can change between when the tool fetches them and when you place your bets.
+⚠️ **Disclaimer**: **PROFIT CALCULATIONS APPLY TO BONUS BETS ONLY!!!!!! NOT CASH BETS!!!** This tool is for educational purposes ONLY. Always verify odds manually before placing bets. Odds can change between when the tool fetches them and when you place your bets.
 
 ⚠️ **Responsible Gaming**: Only use bonus bets you've legitimately earned. Follow all terms and conditions of your sportsbooks. Bet responsibly.
 
@@ -172,10 +163,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Support
 
-If you encounter issues or have questions:
+If you encounter issues:
 1. Check the `debug.log` file for detailed information
-2. Open an issue on GitHub
-3. Make sure you're using the latest version
+2. Feed debug info into LLM
+3. Make branch and paste changes
+4. Submit a PR
+
+If you have questions: open an issue
 
 ## Acknowledgments
 
@@ -184,4 +178,4 @@ If you encounter issues or have questions:
 
 ---
 
-**Happy hedging! 🎯**
+### **Happy hedging! 🎯**

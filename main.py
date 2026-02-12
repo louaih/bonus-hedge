@@ -1,8 +1,3 @@
-"""
-bonus_hedge_finder.py
-Correct region routing for us vs us2 using canonical bookmaker keys.
-"""
-
 from __future__ import annotations
 import argparse
 from dataclasses import dataclass
