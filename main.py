@@ -174,23 +174,105 @@ def calculate_hedge(stake: float, bonus_odds: float, hedge_odds: float) -> Tuple
 
 def fetch_odds_for_sport(api_key: str, sport_key: str, region: str) -> list:
     """Fetch odds for a single sport from a single region"""
-    logger.debug(f"\n[API] Fetching {sport_key} odds from {region}")
+    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
+    params = {
+        "apiKey": api_key,
+        "regions": region,
+        "markets": "h2h",
+        "oddsFormat": "american",
+    }
     
-    r = requests.get(
-        f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds",
-        params={
-            "apiKey": api_key,
-            "regions": region,
-            "markets": "h2h",
-            "oddsFormat": "american",
-        },
-        timeout=30,
-    )
-    r.raise_for_status()
-    data = r.json()
+    logger.debug(f"\n[API] === Starting API Request ===")
+    logger.debug(f"[API] URL: {url}")
+    logger.debug(f"[API] Sport: {sport_key}")
+    logger.debug(f"[API] Region: {region}")
+    logger.debug(f"[API] Markets: h2h")
+    logger.debug(f"[API] API Key length: {len(api_key)} chars")
+    logger.debug(f"[API] API Key (first 10 chars): {api_key[:10]}...")
+    logger.debug(f"[API] API Key (last 4 chars): ...{api_key[-4:]}")
+    logger.debug(f"[API] Full params: {params}")
     
-    logger.debug(f"[API] Received {len(data)} events")
-    return data
+    try:
+        logger.debug(f"[API] Sending GET request...")
+        r = requests.get(url, params=params, timeout=30)
+        
+        logger.debug(f"[API] Response received")
+        logger.debug(f"[API] Status code: {r.status_code}")
+        logger.debug(f"[API] Response headers:")
+        for key, value in r.headers.items():
+            logger.debug(f"[API]   {key}: {value}")
+        
+        logger.debug(f"[API] Response URL: {r.url}")
+        logger.debug(f"[API] Response encoding: {r.encoding}")
+        logger.debug(f"[API] Response size: {len(r.content)} bytes")
+        
+        if r.status_code != 200:
+            logger.debug(f"[API] ERROR - Non-200 status code")
+            logger.debug(f"[API] Response text: {r.text}")
+            logger.debug(f"[API] Reason: {r.reason}")
+        
+        r.raise_for_status()
+        
+        logger.debug(f"[API] Attempting to parse JSON...")
+        data = r.json()
+        
+        logger.debug(f"[API] Successfully parsed JSON")
+        logger.debug(f"[API] Response data type: {type(data)}")
+        logger.debug(f"[API] Number of events: {len(data)}")
+        
+        if len(data) > 0:
+            logger.debug(f"[API] First event preview:")
+            first_event = data[0]
+            logger.debug(f"[API]   Keys: {list(first_event.keys())}")
+            logger.debug(f"[API]   ID: {first_event.get('id', 'N/A')}")
+            logger.debug(f"[API]   Sport: {first_event.get('sport_key', 'N/A')}")
+            logger.debug(f"[API]   Home: {first_event.get('home_team', 'N/A')}")
+            logger.debug(f"[API]   Away: {first_event.get('away_team', 'N/A')}")
+            logger.debug(f"[API]   Bookmakers: {len(first_event.get('bookmakers', []))}")
+        else:
+            logger.debug(f"[API] WARNING - Empty response (0 events)")
+            logger.debug(f"[API] This could mean:")
+            logger.debug(f"[API]   - No games currently available for this sport")
+            logger.debug(f"[API]   - Region doesn't have odds for this sport")
+            logger.debug(f"[API]   - API key may not have access to this region")
+        
+        logger.debug(f"[API] === Request Complete ===\n")
+        return data
+        
+    except requests.exceptions.Timeout as e:
+        logger.debug(f"[API] TIMEOUT ERROR after 30 seconds")
+        logger.debug(f"[API] Error details: {str(e)}")
+        logger.debug(f"[API] Check your internet connection")
+        raise
+    except requests.exceptions.HTTPError as e:
+        logger.debug(f"[API] HTTP ERROR: {str(e)}")
+        logger.debug(f"[API] Status code: {r.status_code}")
+        logger.debug(f"[API] This typically means:")
+        if r.status_code == 401:
+            logger.debug(f"[API]   - Invalid API key")
+        elif r.status_code == 403:
+            logger.debug(f"[API]   - API key doesn't have permission")
+        elif r.status_code == 429:
+            logger.debug(f"[API]   - Rate limit exceeded")
+        elif r.status_code >= 500:
+            logger.debug(f"[API]   - Server error, try again later")
+        raise
+    except requests.exceptions.RequestException as e:
+        logger.debug(f"[API] REQUEST ERROR: {type(e).__name__}")
+        logger.debug(f"[API] Error details: {str(e)}")
+        logger.debug(f"[API] This could be a network connectivity issue")
+        raise
+    except ValueError as e:
+        logger.debug(f"[API] JSON PARSE ERROR: {str(e)}")
+        logger.debug(f"[API] Response was not valid JSON")
+        logger.debug(f"[API] First 500 chars of response: {r.text[:500]}")
+        raise
+    except Exception as e:
+        logger.debug(f"[API] UNEXPECTED ERROR: {type(e).__name__}")
+        logger.debug(f"[API] Error details: {str(e)}")
+        import traceback
+        logger.debug(f"[API] Traceback:\n{traceback.format_exc()}")
+        raise
 
 
 # -----------------------
@@ -276,28 +358,65 @@ def collect_all_odds(api_key: str, sports: List[str], regions: List[str], allowe
     """
     all_rows = []
     
+    logger.debug(f"\n[COLLECT] Starting odds collection")
+    logger.debug(f"[COLLECT] Sports to fetch: {sports}")
+    logger.debug(f"[COLLECT] Regions to query: {regions}")
+    logger.debug(f"[COLLECT] Books to include: {allowed_books}")
+    
     for sport in sports:
         sport_key = SPORT_KEYS[sport.strip()]
+        logger.debug(f"\n[COLLECT] Processing sport: {sport} -> {sport_key}")
         
         for region in regions:
-            events = fetch_odds_for_sport(api_key, sport_key, region)
+            logger.debug(f"[COLLECT] Fetching from region: {region}")
             
-            for event in events:
-                rows = parse_event_odds(event, allowed_books)
-                all_rows.extend(rows)
+            try:
+                events = fetch_odds_for_sport(api_key, sport_key, region)
+                logger.debug(f"[COLLECT] Got {len(events)} events from API")
+                
+                events_processed = 0
+                for event in events:
+                    rows = parse_event_odds(event, allowed_books)
+                    all_rows.extend(rows)
+                    events_processed += 1
+                    if rows:
+                        logger.debug(f"[COLLECT] Event {events_processed}: extracted {len(rows)} odds rows")
+                    
+            except Exception as e:
+                logger.debug(f"[COLLECT] ERROR fetching {sport_key} from {region}: {str(e)}")
+                raise
     
+    logger.debug(f"\n[COLLECT] Collection complete: {len(all_rows)} total odds rows")
     return all_rows
 
 
 def log_collection_summary(rows: List[OddsRow]):
     """Log summary of collected odds data"""
-    logger.debug(f"\n[SUMMARY] Total odds collected: {len(rows)}")
-    logger.debug("[SUMMARY] Books represented:")
+    logger.debug(f"\n[SUMMARY] === Odds Collection Summary ===")
+    logger.debug(f"[SUMMARY] Total odds collected: {len(rows)}")
     
+    if len(rows) == 0:
+        logger.debug(f"[SUMMARY] WARNING - No odds were collected!")
+        logger.debug(f"[SUMMARY] Possible reasons:")
+        logger.debug(f"[SUMMARY]   - No games available for selected sports")
+        logger.debug(f"[SUMMARY]   - API key invalid or expired")
+        logger.debug(f"[SUMMARY]   - Network connectivity issues")
+        logger.debug(f"[SUMMARY]   - Books requested not available in region")
+        return
+    
+    logger.debug(f"[SUMMARY] Books represented:")
     unique_books = set(r.book for r in rows)
     for book in unique_books:
         count = sum(1 for r in rows if r.book == book)
-        logger.debug(f"  - {book}: {count} entries")
+        logger.debug(f"[SUMMARY]   - {book}: {count} entries")
+    
+    logger.debug(f"[SUMMARY] Events represented:")
+    unique_events = set(r.event for r in rows)
+    logger.debug(f"[SUMMARY]   Total unique events: {len(unique_events)}")
+    for event in sorted(unique_events)[:5]:  # Show first 5
+        logger.debug(f"[SUMMARY]   - {event}")
+    if len(unique_events) > 5:
+        logger.debug(f"[SUMMARY]   ... and {len(unique_events) - 5} more")
 
 
 # -----------------------
@@ -370,6 +489,10 @@ def find_all_opportunities(
     
     bonus_rows = [r for r in rows if r.book == bonus_book]
     logger.debug(f"[SEARCH] Found {len(bonus_rows)} bonus opportunities")
+    
+    if len(bonus_rows) == 0:
+        logger.debug(f"[SEARCH] WARNING - No odds found for bonus book '{bonus_book}'")
+        logger.debug(f"[SEARCH] Available books in data: {set(r.book for r in rows)}")
     
     all_opportunities = []
     
@@ -479,18 +602,32 @@ def main():
     logger.debug(f"Min efficiency: {args.min_eff*100}%")
     
     # Parse configuration
-    hedge_books = parse_books(args.books)
-    bonus_book = BOOK_ALIASES[args.bonus_book.lower()]
+    try:
+        hedge_books = parse_books(args.books)
+        bonus_book = BOOK_ALIASES[args.bonus_book.lower()]
+    except KeyError as e:
+        logger.debug(f"\n[ERROR] Invalid book name: {e}")
+        logger.debug(f"[ERROR] Valid book names: {list(BOOK_ALIASES.keys())}")
+        raise
+    
     all_books = hedge_books | {bonus_book}
     regions = get_regions_needed(all_books)
     sports = args.sports.split(",")
     
     logger.debug(f"\n[CONFIG] Resolved bonus book: {bonus_book}")
     logger.debug(f"[CONFIG] Hedge books: {hedge_books}")
+    logger.debug(f"[CONFIG] All books: {all_books}")
     logger.debug(f"[CONFIG] Regions to query: {regions}")
+    logger.debug(f"[CONFIG] Sports to query: {sports}")
     
     # Collect odds data
-    odds_rows = collect_all_odds(args.api_key, sports, regions, all_books)
+    try:
+        odds_rows = collect_all_odds(args.api_key, sports, regions, all_books)
+    except Exception as e:
+        logger.debug(f"\n[ERROR] Failed to collect odds: {str(e)}")
+        logger.debug(f"[ERROR] Check debug.log for detailed API diagnostics")
+        raise
+    
     log_collection_summary(odds_rows)
     
     # Find opportunities
