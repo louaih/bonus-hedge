@@ -1,0 +1,25 @@
+{
+    "api_key": "your_api_key_here",
+    "allowed_books": [
+        "fanduel",
+        "draftkings",
+        "williamhill_us",
+        "betrivers",
+        "fanatics",
+        "betmgm",
+        "ballybet",
+        "espnbet",
+        "betparx",
+        "fliff",
+        "hardrockbet"
+    ],
+    "sports": [
+        "NBA",
+        "NCAAB",
+        "NCAAF",
+        "Euro Basketball",
+        "NFL",
+        "MLB",
+        "NHL"
+    ]
+}
