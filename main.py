@@ -343,7 +343,13 @@ def parse_event_odds(event_data: dict, allowed_books: set[str]) -> List[OddsRow]
     return rows
 
 
-def collect_all_odds(api_key: str, sports: List[str], regions: List[str], allowed_books: set[str]) -> List[OddsRow]:
+def collect_all_odds(
+    api_key: str, 
+    sports: List[str], 
+    regions: List[str], 
+    allowed_books: set[str],
+    progress_callback=None
+) -> List[OddsRow]:
     """
     Collect all odds across sports and regions
     
@@ -352,6 +358,7 @@ def collect_all_odds(api_key: str, sports: List[str], regions: List[str], allowe
         sports: List of sport keys to fetch
         regions: List of regions to query
         allowed_books: Set of book keys to include
+        progress_callback: Optional function(sport_name, current, total) for progress updates
         
     Returns:
         List of all OddsRow objects
@@ -363,12 +370,21 @@ def collect_all_odds(api_key: str, sports: List[str], regions: List[str], allowe
     logger.debug(f"[COLLECT] Regions to query: {regions}")
     logger.debug(f"[COLLECT] Books to include: {allowed_books}")
     
+    total_calls = len(sports) * len(regions)
+    current_call = 0
+    
     for sport in sports:
         sport_key = SPORT_KEYS[sport.strip()]
         logger.debug(f"\n[COLLECT] Processing sport: {sport} -> {sport_key}")
         
         for region in regions:
-            logger.debug(f"[COLLECT] Fetching from region: {region}")
+            current_call += 1
+            
+            # Call progress callback if provided
+            if progress_callback:
+                progress_callback(sport.upper(), current_call, total_calls)
+            
+            logger.debug(f"[COLLECT] Fetching from region: {region} ({current_call}/{total_calls})")
             
             try:
                 events = fetch_odds_for_sport(api_key, sport_key, region)
@@ -384,7 +400,8 @@ def collect_all_odds(api_key: str, sports: List[str], regions: List[str], allowe
                     
             except Exception as e:
                 logger.debug(f"[COLLECT] ERROR fetching {sport_key} from {region}: {str(e)}")
-                raise
+                # Continue with other sports/regions instead of failing completely
+                continue
     
     logger.debug(f"\n[COLLECT] Collection complete: {len(all_rows)} total odds rows")
     return all_rows
