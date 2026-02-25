@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 from datetime import datetime
 import sys
+import traceback
 
 # Import from main.py
 from main import (
@@ -31,6 +32,9 @@ class HedgeFinderGUI:
         self.root = root
         self.root.title("Bonus Hedge Finder")
         self.root.geometry("900x900")
+        
+        # Setup logger for GUI
+        self.logger = Logger("debug.log")
         
         # Load configuration
         self.config = self.load_config()
@@ -161,6 +165,15 @@ class HedgeFinderGUI:
         self.min_eff_var = tk.StringVar(value="0")
         eff_entry = ttk.Entry(config_frame, textvariable=self.min_eff_var, width=15)
         eff_entry.grid(row=3, column=1, sticky=tk.W, padx=(10, 0), pady=5)
+        
+        # Warning label
+        warning_label = ttk.Label(
+            config_frame,
+            text="⚠ Each sport takes ~30 seconds to fetch. Fewer selections = faster results.",
+            foreground="orange",
+            font=('Arial', 8)
+        )
+        warning_label.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
     
     def setup_sports_frame(self, parent):
         """Setup sports selection frame"""
@@ -396,64 +409,147 @@ class HedgeFinderGUI:
     
     def start_search(self):
         """Start the hedge search in a separate thread"""
-        if not self.validate_inputs():
+        self.logger.debug("\n[GUI] start_search called")
+        
+        try:
+            self.logger.debug("[GUI] About to validate inputs")
+            if not self.validate_inputs():
+                self.logger.debug("[GUI] Validation failed")
+                return
+            self.logger.debug("[GUI] Validation passed")
+        except Exception as e:
+            self.logger.debug(f"[GUI] Exception during validation: {e}")
+            self.logger.debug(f"[GUI] Traceback: {traceback.format_exc()}")
+            messagebox.showerror("Validation Error", f"Error during validation: {str(e)}")
             return
         
         if self.is_searching:
+            self.logger.debug("[GUI] Already searching, returning")
             return
         
-        self.is_searching = True
-        self.find_button.config(state='disabled')
-        self.stop_button.config(state='normal')
-        self.progress.start()
-        self.status_var.set("Searching for hedge opportunities...")
-        
-        # Clear results
-        self.results_text.delete(1.0, tk.END)
-        
-        # Start search thread
-        self.search_thread = threading.Thread(target=self.run_search, daemon=True)
-        self.search_thread.start()
+        try:
+            self.logger.debug("[GUI] Setting up search state")
+            self.is_searching = True
+            self.find_button.config(state='disabled')
+            self.stop_button.config(state='normal')
+            self.progress.start()
+            self.status_var.set("Searching for hedge opportunities...")
+            
+            # Clear results
+            self.results_text.delete(1.0, tk.END)
+            
+            self.logger.debug("[GUI] About to start thread")
+            # Start search thread
+            self.search_thread = threading.Thread(target=self.run_search, daemon=True)
+            self.search_thread.start()
+            self.logger.debug("[GUI] Thread started successfully")
+            
+        except Exception as e:
+            self.logger.debug(f"[GUI] Exception in start_search: {e}")
+            self.logger.debug(f"[GUI] Traceback: {traceback.format_exc()}")
+            messagebox.showerror("Start Error", f"Failed to start search: {str(e)}")
+            self.search_complete()
     
     def stop_search(self):
         """Stop the search (note: this is a soft stop, thread will complete)"""
         self.is_searching = False
         self.status_var.set("Stopping search...")
+        self.logger.debug("[GUI] User requested search stop")
     
     def run_search(self):
         """Run the hedge search (runs in separate thread)"""
+        self.logger.debug("\n[GUI] run_search thread started")
+        
         try:
-            # Get inputs
+            # Get inputs with debugging
+            self.logger.debug("[GUI] Getting API key")
             api_key = self.api_key_var.get().strip()
+            self.logger.debug(f"[GUI] API key length: {len(api_key)}")
+            
+            self.logger.debug("[GUI] Getting bonus book")
             bonus_book_display = self.bonus_book_var.get()
-            bonus_book = BOOK_ALIASES[bonus_book_display.lower()]
+            self.logger.debug(f"[GUI] bonus_book_display = '{bonus_book_display}'")
+            
+            # Make sure we handle the case properly
+            bonus_book_key = bonus_book_display.lower().strip()
+            self.logger.debug(f"[GUI] Looking up '{bonus_book_key}' in BOOK_ALIASES")
+            self.logger.debug(f"[GUI] Available keys: {list(BOOK_ALIASES.keys())}")
+            
+            if bonus_book_key not in BOOK_ALIASES:
+                raise ValueError(f"Invalid bonus book: '{bonus_book_display}'. Available: {list(BOOK_ALIASES.keys())}")
+            
+            bonus_book = BOOK_ALIASES[bonus_book_key]
+            self.logger.debug(f"[GUI] Resolved to: {bonus_book}")
+            
+            self.logger.debug("[GUI] Getting stake")
             stake = float(self.stake_var.get())
+            self.logger.debug(f"[GUI] stake = {stake}")
+            
+            self.logger.debug("[GUI] Getting min efficiency")
             min_eff = float(self.min_eff_var.get()) / 100.0
+            self.logger.debug(f"[GUI] min_eff = {min_eff}")
             
             # Get selected sports
+            self.logger.debug("[GUI] Getting selected sports")
             selected_sports = [
                 self.sport_map[sport] for sport, var in self.sport_vars.items() if var.get()
             ]
+            self.logger.debug(f"[GUI] selected_sports = {selected_sports}")
             
             # Get selected books
+            self.logger.debug("[GUI] Getting selected books")
             selected_books = [
                 book for book, var in self.book_vars.items() if var.get()
             ]
+            self.logger.debug(f"[GUI] selected_books = {selected_books}")
+            
+            self.logger.debug("[GUI] Parsing books")
             hedge_books = parse_books(','.join(selected_books))
+            self.logger.debug(f"[GUI] hedge_books = {hedge_books}")
             
             # All books (bonus + hedge)
             all_books = hedge_books | {bonus_book}
             regions = get_regions_needed(all_books)
             
-            # Update status
+            self.logger.debug(f"[GUI] all_books = {all_books}")
+            self.logger.debug(f"[GUI] regions = {regions}")
+            
+            # Calculate total API calls for better progress
+            total_calls = len(selected_sports) * len(regions)
+            
+            # Update status with initial info
             self.root.after(0, lambda: self.status_var.set(
-                f"Fetching odds for {len(selected_sports)} sports..."
+                f"Fetching odds for {len(selected_sports)} sports ({total_calls} API calls)..."
             ))
             
-            # Collect odds
-            odds_rows = collect_all_odds(api_key, selected_sports, regions, all_books)
+            self.logger.debug("[GUI] About to call collect_all_odds")
+            
+            # Progress callback function
+            def update_progress(sport_name, current, total):
+                if self.is_searching:
+                    pct = int((current / total) * 100)
+                    msg = f"Fetching {sport_name} odds... ({current}/{total} - {pct}%)"
+                    self.root.after(0, lambda m=msg: self.status_var.set(m))
+            
+            # Collect odds with progress updates
+            try:
+                odds_rows = collect_all_odds(
+                    api_key, 
+                    selected_sports, 
+                    regions, 
+                    all_books,
+                    progress_callback=update_progress
+                )
+                self.logger.debug(f"[GUI] Got {len(odds_rows)} odds rows")
+            except Exception as e:
+                self.logger.debug(f"[GUI] Exception in collect_all_odds: {e}")
+                self.logger.debug(f"[GUI] Traceback: {traceback.format_exc()}")
+                error_msg = f"Failed to fetch odds: {str(e)}\n\nCheck debug.log for details."
+                self.root.after(0, lambda: self.display_error(error_msg))
+                return
             
             if not self.is_searching:
+                self.logger.debug("[GUI] Search cancelled by user")
                 self.root.after(0, self.search_complete)
                 return
             
@@ -461,6 +557,18 @@ class HedgeFinderGUI:
             self.root.after(0, lambda: self.status_var.set(
                 f"Analyzing {len(odds_rows)} odds entries..."
             ))
+            
+            if len(odds_rows) == 0:
+                self.logger.debug("[GUI] No odds rows retrieved")
+                error_msg = "No odds data retrieved. This could mean:\n"
+                error_msg += "• No games available for selected sports\n"
+                error_msg += "• Invalid API key\n"
+                error_msg += "• Selected books not available in your region\n"
+                error_msg += "\nCheck debug.log for detailed diagnostics."
+                self.root.after(0, lambda: self.display_error(error_msg))
+                return
+            
+            self.logger.debug("[GUI] Finding opportunities")
             
             # Find opportunities
             opportunities = find_all_opportunities(
@@ -470,7 +578,10 @@ class HedgeFinderGUI:
                 min_eff
             )
             
+            self.logger.debug(f"[GUI] Found {len(opportunities)} opportunities")
+            
             if not self.is_searching:
+                self.logger.debug("[GUI] Search cancelled by user")
                 self.root.after(0, self.search_complete)
                 return
             
@@ -480,12 +591,18 @@ class HedgeFinderGUI:
             ))
             
         except Exception as e:
-            self.root.after(0, lambda: self.display_error(str(e)))
+            self.logger.debug(f"[GUI] Exception in run_search: {type(e).__name__}: {e}")
+            self.logger.debug(f"[GUI] Traceback: {traceback.format_exc()}")
+            error_msg = f"{type(e).__name__}: {str(e)}\n\nCheck debug.log for full traceback."
+            self.root.after(0, lambda: self.display_error(error_msg))
         finally:
+            self.logger.debug("[GUI] run_search finally block")
             self.root.after(0, self.search_complete)
     
     def display_results(self, opportunities, stake, bonus_book, odds_count):
         """Display search results in the text area"""
+        self.logger.debug(f"[GUI] Displaying results: {len(opportunities)} opportunities")
+        
         self.results_text.delete(1.0, tk.END)
         
         # Header
@@ -584,9 +701,12 @@ class HedgeFinderGUI:
         self.status_var.set(
             f"Search complete - Found {len(opportunities)} opportunities"
         )
+        self.logger.debug(f"[GUI] Results displayed successfully")
     
     def display_error(self, error_msg):
         """Display error message"""
+        self.logger.debug(f"[GUI] Displaying error: {error_msg}")
+        
         self.results_text.delete(1.0, tk.END)
         self.results_text.insert(tk.END, "ERROR\n", "error")
         self.results_text.insert(tk.END, f"\n{error_msg}\n")
@@ -595,6 +715,7 @@ class HedgeFinderGUI:
     
     def search_complete(self):
         """Reset UI after search completes"""
+        self.logger.debug("[GUI] Search complete, resetting UI")
         self.is_searching = False
         self.find_button.config(state='normal')
         self.stop_button.config(state='disabled')
