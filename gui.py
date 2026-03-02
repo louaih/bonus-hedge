@@ -25,6 +25,8 @@ from main import (
     select_best_opportunity,
     find_qualifying_opportunities,
     select_best_qualifying_opportunity,
+    calculate_hedge,
+    calculate_qualifying_hedge,
     Logger,
 )
 
@@ -104,8 +106,8 @@ class HedgeFinderGUI:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(5, weight=1)
-        
+        main_frame.rowconfigure(6, weight=1)
+
         # Title
         title_label = ttk.Label(
             main_frame,
@@ -113,22 +115,25 @@ class HedgeFinderGUI:
             font=('Arial', 16, 'bold')
         )
         title_label.grid(row=0, column=0, pady=(0, 20))
-        
+
         # Configuration Frame
         self.setup_config_frame(main_frame)
-        
+
         # Sports Selection Frame
         self.setup_sports_frame(main_frame)
-        
+
         # Books Selection Frame
         self.setup_books_frame(main_frame)
-        
+
         # Control Frame
         self.setup_control_frame(main_frame)
-        
+
+        # Manual Calculator Frame
+        self.setup_manual_frame(main_frame)
+
         # Results Frame
         self.setup_results_frame(main_frame)
-        
+
         # Status Bar
         self.setup_status_bar(main_frame)
     
@@ -288,6 +293,57 @@ class HedgeFinderGUI:
             command=self.deselect_all_books
         ).grid(row=0, column=1, padx=5)
     
+    def setup_manual_frame(self, parent):
+        """Setup manual hedge calculator frame"""
+        manual_frame = ttk.LabelFrame(parent, text="Manual Calculator", padding="10")
+        manual_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+
+        # Inputs row
+        inputs_frame = ttk.Frame(manual_frame)
+        inputs_frame.grid(row=0, column=0, sticky=tk.W)
+
+        ttk.Label(inputs_frame, text="Stake ($):").grid(row=0, column=0, padx=(0, 4))
+        self.manual_stake_var = tk.StringVar(value="100")
+        ttk.Entry(inputs_frame, textvariable=self.manual_stake_var, width=8).grid(row=0, column=1, padx=(0, 14))
+
+        ttk.Label(inputs_frame, text="Your odds:").grid(row=0, column=2, padx=(0, 4))
+        self.manual_odds_a_var = tk.StringVar(value="+200")
+        ttk.Entry(inputs_frame, textvariable=self.manual_odds_a_var, width=8).grid(row=0, column=3, padx=(0, 14))
+
+        ttk.Label(inputs_frame, text="Hedge odds:").grid(row=0, column=4, padx=(0, 4))
+        self.manual_odds_b_var = tk.StringVar(value="-250")
+        ttk.Entry(inputs_frame, textvariable=self.manual_odds_b_var, width=8).grid(row=0, column=5, padx=(0, 14))
+
+        ttk.Button(inputs_frame, text="Calculate", command=self.run_manual_calc).grid(row=0, column=6)
+
+        # Results labels
+        self.manual_bonus_label = ttk.Label(manual_frame, text="", font=('Courier', 9))
+        self.manual_bonus_label.grid(row=1, column=0, sticky=tk.W, pady=(6, 0))
+
+        self.manual_qual_label = ttk.Label(manual_frame, text="", font=('Courier', 9))
+        self.manual_qual_label.grid(row=2, column=0, sticky=tk.W)
+
+    def run_manual_calc(self):
+        """Compute and display hedge results from manually entered odds"""
+        try:
+            stake = float(self.manual_stake_var.get())
+            odds_a = float(self.manual_odds_a_var.get())
+            odds_b = float(self.manual_odds_b_var.get())
+        except ValueError:
+            messagebox.showerror("Error", "Stake and odds must be numbers (e.g. 100, +200, -110)")
+            return
+
+        bonus_hedge, bonus_profit, bonus_eff = calculate_hedge(stake, odds_a, odds_b)
+        qual_hedge, qual_loss, qual_loss_pct = calculate_qualifying_hedge(stake, odds_a, odds_b)
+
+        self.manual_bonus_label.config(
+            text=f"Bonus:      Hedge ${bonus_hedge:.2f}  |  Profit ${bonus_profit:.2f}  |  Efficiency {bonus_eff*100:.2f}%"
+        )
+        qlabel = "Profit" if qual_loss < 0 else "Loss"
+        self.manual_qual_label.config(
+            text=f"Qualifying: Hedge ${qual_hedge:.2f}  |  {qlabel} ${abs(qual_loss):.2f}  |  Loss {qual_loss_pct*100:.2f}%"
+        )
+
     def setup_control_frame(self, parent):
         """Setup control buttons frame"""
         control_frame = ttk.Frame(parent)
@@ -323,7 +379,7 @@ class HedgeFinderGUI:
     def setup_results_frame(self, parent):
         """Setup results display frame"""
         results_frame = ttk.LabelFrame(parent, text="Results", padding="10")
-        results_frame.grid(row=5, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        results_frame.grid(row=6, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         results_frame.columnconfigure(0, weight=1)
         results_frame.rowconfigure(0, weight=1)
         
@@ -346,7 +402,7 @@ class HedgeFinderGUI:
     def setup_status_bar(self, parent):
         """Setup status bar"""
         status_frame = ttk.Frame(parent)
-        status_frame.grid(row=6, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
+        status_frame.grid(row=7, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
         
         self.status_var = tk.StringVar(value="Ready")
         status_label = ttk.Label(status_frame, textvariable=self.status_var)

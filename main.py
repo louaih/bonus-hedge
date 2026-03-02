@@ -729,6 +729,30 @@ def log_no_qualifying_opportunities():
     logger.info("[RESULT] Try increasing --max-loss or checking more sports/books")
 
 
+def log_manual_results(stake: float, odds_a: float, odds_b: float):
+    """Calculate and display hedge results for manually supplied odds (no API needed)"""
+    bonus_hedge, bonus_profit, bonus_eff = calculate_hedge(stake, odds_a, odds_b)
+    qual_hedge, qual_loss, qual_loss_pct = calculate_qualifying_hedge(stake, odds_a, odds_b)
+
+    logger.console("\n" + "="*80)
+    logger.console("MANUAL HEDGE CALCULATOR")
+    logger.console("="*80)
+    logger.console(f"Your bet:  {odds_a:+.0f}   stake: ${stake:.2f}")
+    logger.console(f"Hedge bet: {odds_b:+.0f}")
+    logger.console("")
+    logger.console("BONUS BET MODE:")
+    logger.console(f"  Hedge stake:   ${bonus_hedge:.2f}")
+    logger.console(f"  Locked profit: ${bonus_profit:.2f}")
+    logger.console(f"  Efficiency:    {bonus_eff*100:.2f}%")
+    logger.console("")
+    logger.console("QUALIFYING BET MODE:")
+    logger.console(f"  Hedge stake: ${qual_hedge:.2f}")
+    qlabel = "Guaranteed profit" if qual_loss < 0 else "Guaranteed loss"
+    logger.console(f"  {qlabel}: ${abs(qual_loss):.2f}")
+    logger.console(f"  Loss: {qual_loss_pct*100:.2f}% of stake")
+    logger.console("="*80)
+
+
 # -----------------------
 # MAIN
 # -----------------------
@@ -736,23 +760,41 @@ def log_no_qualifying_opportunities():
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Find optimal bonus bet hedges and qualifying bet hedges")
-    parser.add_argument("--api-key", required=True, help="API key for odds service")
+    parser.add_argument("--api-key", default=None, help="API key for odds service")
     parser.add_argument("--mode", choices=["bonus", "qualifying"], default="bonus",
                         help="bonus: free bet hedging; qualifying: cash bet hedge to minimize loss")
-    parser.add_argument("--bonus-book", required=True,
+    parser.add_argument("--bonus-book", default=None,
                         help="Book offering the bonus (bonus mode) or where qualifying bet must go (qualifying mode)")
-    parser.add_argument("--books", required=True, help="Comma-separated list of books to hedge with")
+    parser.add_argument("--books", default=None, help="Comma-separated list of books to hedge with")
     parser.add_argument("--sports", default="nba,ncaab", help="Comma-separated list of sports")
     parser.add_argument("--stake", type=float, default=250, help="Bet stake amount in dollars")
     parser.add_argument("--min-eff", type=float, default=0.0, help="Min efficiency threshold (bonus mode, 0.0-1.0)")
     parser.add_argument("--max-loss", type=float, default=1.0,
                         help="Max acceptable loss as fraction of stake (qualifying mode, e.g. 0.05 = 5%%)")
+    parser.add_argument("--calc", action="store_true",
+                        help="Manual calculator: skip API, compute hedge from --odds-a and --odds-b")
+    parser.add_argument("--odds-a", type=float, default=None,
+                        help="Your bet odds in American format (e.g. 200 or -110). Use =syntax for negatives: --odds-a=-110")
+    parser.add_argument("--odds-b", type=float, default=None,
+                        help="Hedge bet odds in American format. Use =syntax for negatives: --odds-b=-250")
     return parser.parse_args()
 
 
 def main():
     args = parse_arguments()
-    
+
+    # Manual calculator: no API needed
+    if args.calc:
+        if args.odds_a is None or args.odds_b is None:
+            print("Error: --calc requires --odds-a and --odds-b (use =syntax for negatives: --odds-a=-110)")
+            sys.exit(1)
+        log_manual_results(args.stake, args.odds_a, args.odds_b)
+        return
+
+    if not args.api_key or not args.bonus_book or not args.books:
+        print("Error: --api-key, --bonus-book, and --books are required (or use --calc for manual calculation)")
+        sys.exit(1)
+
     # Log startup info
     logger.debug("\n" + "="*60)
     logger.debug("BONUS HEDGE FINDER")
@@ -766,7 +808,7 @@ def main():
         logger.debug(f"Min efficiency: {args.min_eff*100}%")
     else:
         logger.debug(f"Max loss: {args.max_loss*100}%")
-    
+
     # Parse configuration
     try:
         hedge_books = parse_books(args.books)
