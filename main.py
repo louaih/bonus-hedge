@@ -119,6 +119,21 @@ class HedgeOpportunity:
     efficiency: float
 
 
+@dataclass
+class QualifyingHedgeOpportunity:
+    """Calculated hedge opportunity for a qualifying (cash) bet"""
+    event: str
+    selection: str
+    opposite: str
+    qual_book: str
+    qual_odds: float
+    hedge_book: str
+    hedge_odds: float
+    hedge_stake: float
+    loss: float      # positive = guaranteed loss, negative = guaranteed profit (true arb)
+    loss_pct: float  # loss as fraction of qualifying stake
+
+
 # -----------------------
 # CONFIGURATION
 # -----------------------
@@ -153,7 +168,7 @@ def american_to_decimal(o: float) -> float:
 def calculate_hedge(stake: float, bonus_odds: float, hedge_odds: float) -> Tuple[float, float, float]:
     """
     Calculate hedge stake, profit, and efficiency
-    
+
     Returns:
         (hedge_stake, profit, efficiency)
     """
@@ -166,6 +181,23 @@ def calculate_hedge(stake: float, bonus_odds: float, hedge_odds: float) -> Tuple
     )
     efficiency = profit / stake
     return hedge, profit, efficiency
+
+
+def calculate_qualifying_hedge(stake: float, qual_odds: float, hedge_odds: float) -> Tuple[float, float, float]:
+    """
+    Calculate optimal hedge for a qualifying (cash) bet.
+
+    Sizes the hedge to equalize P&L on both outcomes, minimizing guaranteed loss.
+    loss > 0 means guaranteed loss; loss < 0 means guaranteed profit (true arb).
+
+    Returns:
+        (hedge_stake, loss, loss_pct)
+    """
+    dA = american_to_decimal(qual_odds)
+    dB = american_to_decimal(hedge_odds)
+    hedge = stake * dA / dB
+    loss = -(stake * (dA - 1) - hedge)
+    return hedge, loss, loss / stake
 
 
 # -----------------------
@@ -533,6 +565,66 @@ def select_best_opportunity(opportunities: List[HedgeOpportunity]) -> Optional[H
     return max(opportunities, key=lambda x: x.efficiency)
 
 
+def find_qualifying_opportunities(
+    rows: List[OddsRow],
+    qual_book: str,
+    stake: float,
+    max_loss_pct: float
+) -> List[QualifyingHedgeOpportunity]:
+    """
+    Find qualifying bet hedge opportunities within the max loss threshold.
+
+    Args:
+        rows: All available odds
+        qual_book: Book where the qualifying bet must be placed
+        stake: Qualifying bet amount
+        max_loss_pct: Maximum loss as fraction of stake (e.g. 0.1 = 10% loss)
+    """
+    logger.debug(f"\n[QUAL] Looking for qualifying hedges with qual_book='{qual_book}'")
+
+    qual_rows = [r for r in rows if r.book == qual_book]
+    logger.debug(f"[QUAL] Found {len(qual_rows)} qualifying rows")
+
+    if not qual_rows:
+        logger.debug(f"[QUAL] WARNING - No odds found for '{qual_book}'")
+        logger.debug(f"[QUAL] Available books: {set(r.book for r in rows)}")
+
+    all_opportunities = []
+    for qual_row in qual_rows:
+        for row in rows:
+            if (row.event == qual_row.event and
+                    row.selection == qual_row.opposite and
+                    row.book != qual_row.book):
+                hedge_stake, loss, loss_pct = calculate_qualifying_hedge(
+                    stake, qual_row.odds, row.odds
+                )
+                all_opportunities.append(QualifyingHedgeOpportunity(
+                    event=qual_row.event,
+                    selection=qual_row.selection,
+                    opposite=qual_row.opposite,
+                    qual_book=qual_row.book,
+                    qual_odds=qual_row.odds,
+                    hedge_book=row.book,
+                    hedge_odds=row.odds,
+                    hedge_stake=hedge_stake,
+                    loss=loss,
+                    loss_pct=loss_pct,
+                ))
+
+    filtered = [opp for opp in all_opportunities if opp.loss_pct <= max_loss_pct]
+    logger.debug(f"[QUAL] {len(all_opportunities)} total, {len(filtered)} within {max_loss_pct*100:.2f}% max loss")
+    return filtered
+
+
+def select_best_qualifying_opportunity(
+    opportunities: List[QualifyingHedgeOpportunity]
+) -> Optional[QualifyingHedgeOpportunity]:
+    """Select the qualifying opportunity with the lowest loss (or highest profit if true arb)"""
+    if not opportunities:
+        return None
+    return min(opportunities, key=lambda x: x.loss_pct)
+
+
 # -----------------------
 # OUTPUT
 # -----------------------
@@ -584,9 +676,57 @@ def log_no_opportunities():
     logger.console("\n" + "="*80)
     logger.console("No valid bonus hedge found.")
     logger.console("="*80)
-    
+
     logger.info("\n[RESULT] No valid bonus hedge found")
     logger.info("[RESULT] Check minimum efficiency threshold or available odds")
+
+
+def log_qualifying_opportunity(opp: QualifyingHedgeOpportunity, stake: float):
+    """Log a single qualifying hedge opportunity to log file"""
+    label = "Profit" if opp.loss < 0 else "Loss"
+    logger.info(f"\n{opp.event}")
+    logger.info(f"  Qualifying: {opp.qual_book} | {opp.selection} @ {opp.qual_odds:+} (stake: ${stake:.2f})")
+    logger.info(f"  Hedge:      {opp.hedge_book} | {opp.opposite} @ {opp.hedge_odds:+} (stake: ${opp.hedge_stake:.2f})")
+    logger.info(f"  → {label}: ${abs(opp.loss):.2f} | Loss: {opp.loss_pct*100:.2f}%")
+
+
+def log_all_qualifying_opportunities(opportunities: List[QualifyingHedgeOpportunity], stake: float):
+    """Log all tested qualifying opportunities"""
+    logger.info("\n" + "="*80)
+    logger.info(f"TESTING {len(opportunities)} QUALIFYING HEDGE OPPORTUNITIES")
+    logger.info("="*80)
+    for opp in opportunities:
+        log_qualifying_opportunity(opp, stake)
+
+
+def log_best_qualifying_opportunity(opp: QualifyingHedgeOpportunity, stake: float):
+    """Log the best qualifying hedge - summary to console, details to log"""
+    label = "Guaranteed profit" if opp.loss < 0 else "Guaranteed loss"
+    logger.console("\n" + "="*80)
+    logger.console("BEST QUALIFYING BET HEDGE")
+    logger.console("="*80)
+    logger.console(f"Event: {opp.event}")
+    logger.console(f"Qualifying bet: {opp.qual_book} | {opp.selection} @ {opp.qual_odds:+} (stake: ${stake:.2f})")
+    logger.console(f"Hedge bet:      {opp.hedge_book} | {opp.opposite} @ {opp.hedge_odds:+} (stake: ${opp.hedge_stake:.2f})")
+    logger.console(f"{label}: ${abs(opp.loss):.2f}")
+    logger.console(f"Loss: {opp.loss_pct*100:.2f}% of stake")
+    logger.console("="*80)
+
+    logger.info("\n[RESULT] Best qualifying hedge found:")
+    logger.info(f"[RESULT] Event: {opp.event}")
+    logger.info(f"[RESULT] Qualifying: {opp.qual_book} | {opp.selection} @ {opp.qual_odds:+} (${stake:.2f})")
+    logger.info(f"[RESULT] Hedge: {opp.hedge_book} | {opp.opposite} @ {opp.hedge_odds:+} (${opp.hedge_stake:.2f})")
+    logger.info(f"[RESULT] {label}: ${abs(opp.loss):.2f} ({opp.loss_pct*100:.2f}%)")
+
+
+def log_no_qualifying_opportunities():
+    """Log when no valid qualifying opportunities are found"""
+    logger.console("\n" + "="*80)
+    logger.console("No valid qualifying hedge found.")
+    logger.console("="*80)
+
+    logger.info("\n[RESULT] No valid qualifying hedge found")
+    logger.info("[RESULT] Try increasing --max-loss or checking more sports/books")
 
 
 # -----------------------
@@ -595,13 +735,18 @@ def log_no_opportunities():
 
 def parse_arguments():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description="Find optimal bonus bet hedges")
+    parser = argparse.ArgumentParser(description="Find optimal bonus bet hedges and qualifying bet hedges")
     parser.add_argument("--api-key", required=True, help="API key for odds service")
-    parser.add_argument("--bonus-book", required=True, help="Book offering the bonus")
+    parser.add_argument("--mode", choices=["bonus", "qualifying"], default="bonus",
+                        help="bonus: free bet hedging; qualifying: cash bet hedge to minimize loss")
+    parser.add_argument("--bonus-book", required=True,
+                        help="Book offering the bonus (bonus mode) or where qualifying bet must go (qualifying mode)")
     parser.add_argument("--books", required=True, help="Comma-separated list of books to hedge with")
     parser.add_argument("--sports", default="nba,ncaab", help="Comma-separated list of sports")
-    parser.add_argument("--stake", type=float, default=250, help="Bonus bet stake amount")
-    parser.add_argument("--min-eff", type=float, default=0.0, help="Minimum efficiency (0.0 to 1.0)")
+    parser.add_argument("--stake", type=float, default=250, help="Bet stake amount in dollars")
+    parser.add_argument("--min-eff", type=float, default=0.0, help="Min efficiency threshold (bonus mode, 0.0-1.0)")
+    parser.add_argument("--max-loss", type=float, default=1.0,
+                        help="Max acceptable loss as fraction of stake (qualifying mode, e.g. 0.05 = 5%%)")
     return parser.parse_args()
 
 
@@ -612,11 +757,15 @@ def main():
     logger.debug("\n" + "="*60)
     logger.debug("BONUS HEDGE FINDER")
     logger.debug("="*60)
-    logger.debug(f"Bonus book: {args.bonus_book}")
+    logger.debug(f"Mode: {args.mode}")
+    logger.debug(f"Bonus/qualifying book: {args.bonus_book}")
     logger.debug(f"Hedge books: {args.books}")
     logger.debug(f"Sports: {args.sports}")
     logger.debug(f"Stake: ${args.stake}")
-    logger.debug(f"Min efficiency: {args.min_eff*100}%")
+    if args.mode == "bonus":
+        logger.debug(f"Min efficiency: {args.min_eff*100}%")
+    else:
+        logger.debug(f"Max loss: {args.max_loss*100}%")
     
     # Parse configuration
     try:
@@ -647,23 +796,23 @@ def main():
     
     log_collection_summary(odds_rows)
     
-    # Find opportunities
-    opportunities = find_all_opportunities(
-        odds_rows,
-        bonus_book,
-        args.stake,
-        args.min_eff
-    )
-    
-    # Display results
-    if not opportunities:
-        log_no_opportunities()
-        return
-    
-    log_all_opportunities(opportunities, args.stake)
-    
-    best = select_best_opportunity(opportunities)
-    log_best_opportunity(best)
+    # Find opportunities and display results
+    if args.mode == "bonus":
+        opportunities = find_all_opportunities(odds_rows, bonus_book, args.stake, args.min_eff)
+        if not opportunities:
+            log_no_opportunities()
+            return
+        log_all_opportunities(opportunities, args.stake)
+        best = select_best_opportunity(opportunities)
+        log_best_opportunity(best)
+    else:
+        opportunities = find_qualifying_opportunities(odds_rows, bonus_book, args.stake, args.max_loss)
+        if not opportunities:
+            log_no_qualifying_opportunities()
+            return
+        log_all_qualifying_opportunities(opportunities, args.stake)
+        best = select_best_qualifying_opportunity(opportunities)
+        log_best_qualifying_opportunity(best, args.stake)
 
 
 if __name__ == "__main__":

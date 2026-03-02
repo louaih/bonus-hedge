@@ -23,6 +23,8 @@ from main import (
     collect_all_odds,
     find_all_opportunities,
     select_best_opportunity,
+    find_qualifying_opportunities,
+    select_best_qualifying_opportunity,
     Logger,
 )
 
@@ -35,10 +37,13 @@ class HedgeFinderGUI:
         
         # Setup logger for GUI
         self.logger = Logger("debug.log")
-        
+
+        # Mode: "bonus" or "qualifying"
+        self.mode_var = tk.StringVar(value="bonus")
+
         # Load configuration
         self.config = self.load_config()
-        
+
         # Setup UI
         self.setup_ui()
         
@@ -132,15 +137,25 @@ class HedgeFinderGUI:
         config_frame = ttk.LabelFrame(parent, text="Configuration", padding="10")
         config_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         config_frame.columnconfigure(1, weight=1)
-        
+
+        # Mode selection
+        ttk.Label(config_frame, text="Mode:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        mode_frame = ttk.Frame(config_frame)
+        mode_frame.grid(row=0, column=1, sticky=tk.W, padx=(10, 0), pady=5)
+        ttk.Radiobutton(mode_frame, text="Bonus Bet", variable=self.mode_var,
+                        value="bonus", command=self.on_mode_change).grid(row=0, column=0, padx=(0, 15))
+        ttk.Radiobutton(mode_frame, text="Qualifying Bet", variable=self.mode_var,
+                        value="qualifying", command=self.on_mode_change).grid(row=0, column=1)
+
         # API Key
-        ttk.Label(config_frame, text="API Key:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        ttk.Label(config_frame, text="API Key:").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.api_key_var = tk.StringVar(value=self.config.get('api_key', ''))
         api_entry = ttk.Entry(config_frame, textvariable=self.api_key_var, width=50, show='*')
-        api_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=5)
-        
-        # Bonus Book
-        ttk.Label(config_frame, text="Bonus Book:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        api_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=5)
+
+        # Source book (label changes based on mode)
+        self.source_book_label = ttk.Label(config_frame, text="Bonus Book:")
+        self.source_book_label.grid(row=2, column=0, sticky=tk.W, pady=5)
         self.bonus_book_var = tk.StringVar()
         bonus_books = sorted([k.title() for k in BOOK_ALIASES.keys()])
         bonus_combo = ttk.Combobox(
@@ -150,22 +165,23 @@ class HedgeFinderGUI:
             state='readonly',
             width=20
         )
-        bonus_combo.grid(row=1, column=1, sticky=tk.W, padx=(10, 0), pady=5)
+        bonus_combo.grid(row=2, column=1, sticky=tk.W, padx=(10, 0), pady=5)
         if bonus_books:
             bonus_combo.current(0)
-        
+
         # Stake
-        ttk.Label(config_frame, text="Stake ($):").grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Label(config_frame, text="Stake ($):").grid(row=3, column=0, sticky=tk.W, pady=5)
         self.stake_var = tk.StringVar(value="250")
         stake_entry = ttk.Entry(config_frame, textvariable=self.stake_var, width=15)
-        stake_entry.grid(row=2, column=1, sticky=tk.W, padx=(10, 0), pady=5)
-        
-        # Minimum Efficiency
-        ttk.Label(config_frame, text="Min Efficiency (%):").grid(row=3, column=0, sticky=tk.W, pady=5)
+        stake_entry.grid(row=3, column=1, sticky=tk.W, padx=(10, 0), pady=5)
+
+        # Threshold (label changes based on mode)
+        self.threshold_label = ttk.Label(config_frame, text="Min Efficiency (%):")
+        self.threshold_label.grid(row=4, column=0, sticky=tk.W, pady=5)
         self.min_eff_var = tk.StringVar(value="0")
         eff_entry = ttk.Entry(config_frame, textvariable=self.min_eff_var, width=15)
-        eff_entry.grid(row=3, column=1, sticky=tk.W, padx=(10, 0), pady=5)
-        
+        eff_entry.grid(row=4, column=1, sticky=tk.W, padx=(10, 0), pady=5)
+
         # Warning label
         warning_label = ttk.Label(
             config_frame,
@@ -173,7 +189,16 @@ class HedgeFinderGUI:
             foreground="orange",
             font=('Arial', 8)
         )
-        warning_label.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
+        warning_label.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
+
+    def on_mode_change(self):
+        """Update labels when mode radio button changes"""
+        if self.mode_var.get() == "bonus":
+            self.source_book_label.config(text="Bonus Book:")
+            self.threshold_label.config(text="Min Efficiency (%):")
+        else:
+            self.source_book_label.config(text="Qualifying Book:")
+            self.threshold_label.config(text="Max Loss (%):")
     
     def setup_sports_frame(self, parent):
         """Setup sports selection frame"""
@@ -380,13 +405,16 @@ class HedgeFinderGUI:
             messagebox.showerror("Error", "Stake must be a positive number")
             return False
         
-        # Check min efficiency
+        # Check threshold (min efficiency or max loss)
         try:
-            min_eff = float(self.min_eff_var.get())
-            if min_eff < 0 or min_eff > 100:
+            threshold = float(self.min_eff_var.get())
+            if threshold < 0 or threshold > 100:
                 raise ValueError()
         except ValueError:
-            messagebox.showerror("Error", "Min efficiency must be between 0 and 100")
+            if self.mode_var.get() == "bonus":
+                messagebox.showerror("Error", "Min efficiency must be between 0 and 100")
+            else:
+                messagebox.showerror("Error", "Max loss must be between 0 and 100")
             return False
         
         # Check selected sports
@@ -485,9 +513,10 @@ class HedgeFinderGUI:
             stake = float(self.stake_var.get())
             self.logger.debug(f"[GUI] stake = {stake}")
             
-            self.logger.debug("[GUI] Getting min efficiency")
-            min_eff = float(self.min_eff_var.get()) / 100.0
-            self.logger.debug(f"[GUI] min_eff = {min_eff}")
+            self.logger.debug("[GUI] Getting mode and threshold")
+            mode = self.mode_var.get()
+            threshold = float(self.min_eff_var.get()) / 100.0
+            self.logger.debug(f"[GUI] mode = {mode}, threshold = {threshold}")
             
             # Get selected sports
             self.logger.debug("[GUI] Getting selected sports")
@@ -569,26 +598,29 @@ class HedgeFinderGUI:
                 return
             
             self.logger.debug("[GUI] Finding opportunities")
-            
+
             # Find opportunities
-            opportunities = find_all_opportunities(
-                odds_rows,
-                bonus_book,
-                stake,
-                min_eff
-            )
-            
+            if mode == "bonus":
+                opportunities = find_all_opportunities(odds_rows, bonus_book, stake, threshold)
+            else:
+                opportunities = find_qualifying_opportunities(odds_rows, bonus_book, stake, threshold)
+
             self.logger.debug(f"[GUI] Found {len(opportunities)} opportunities")
-            
+
             if not self.is_searching:
                 self.logger.debug("[GUI] Search cancelled by user")
                 self.root.after(0, self.search_complete)
                 return
-            
+
             # Display results
-            self.root.after(0, lambda: self.display_results(
-                opportunities, stake, bonus_book, len(odds_rows)
-            ))
+            if mode == "bonus":
+                self.root.after(0, lambda: self.display_results(
+                    opportunities, stake, bonus_book, len(odds_rows)
+                ))
+            else:
+                self.root.after(0, lambda: self.display_qualifying_results(
+                    opportunities, stake, len(odds_rows)
+                ))
             
         except Exception as e:
             self.logger.debug(f"[GUI] Exception in run_search: {type(e).__name__}: {e}")
@@ -702,7 +734,84 @@ class HedgeFinderGUI:
             f"Search complete - Found {len(opportunities)} opportunities"
         )
         self.logger.debug(f"[GUI] Results displayed successfully")
-    
+
+    def display_qualifying_results(self, opportunities, stake, odds_count):
+        """Display qualifying hedge search results"""
+        self.logger.debug(f"[GUI] Displaying qualifying results: {len(opportunities)} opportunities")
+
+        self.results_text.delete(1.0, tk.END)
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.results_text.insert(tk.END, f"Search completed at {timestamp}\n", "header")
+        self.results_text.insert(tk.END, f"Analyzed {odds_count} odds entries\n\n", "header")
+
+        if not opportunities:
+            self.results_text.insert(tk.END, "No qualifying hedge opportunities found.\n", "error")
+            self.results_text.insert(
+                tk.END,
+                "Try increasing Max Loss % or checking more sports/books.\n"
+            )
+            self.status_var.set("Search complete - No opportunities found")
+            return
+
+        best = select_best_qualifying_opportunity(opportunities)
+
+        self.results_text.insert(tk.END, "=" * 80 + "\n", "header")
+        self.results_text.insert(tk.END, "BEST QUALIFYING BET HEDGE\n", "header")
+        self.results_text.insert(tk.END, "=" * 80 + "\n\n", "header")
+
+        self.results_text.insert(tk.END, f"Event: {best.event}\n\n", "event")
+
+        self.results_text.insert(tk.END, f"Qualifying Bet ({best.qual_book}):\n")
+        self.results_text.insert(tk.END, f"  {best.selection} @ {best.qual_odds:+}\n")
+        self.results_text.insert(tk.END, f"  Stake: ${stake:.2f}\n\n")
+
+        self.results_text.insert(tk.END, f"Hedge Bet ({best.hedge_book}):\n")
+        self.results_text.insert(tk.END, f"  {best.opposite} @ {best.hedge_odds:+}\n")
+        self.results_text.insert(tk.END, f"  Stake: ${best.hedge_stake:.2f}\n\n")
+
+        result_label = "Guaranteed Profit" if best.loss < 0 else "Guaranteed Loss"
+        result_color = "success" if best.loss < 0 else "error"
+        self.results_text.insert(tk.END, "RESULT:\n", "header")
+        self.results_text.insert(tk.END, f"  {result_label}: ${abs(best.loss):.2f}\n", result_color)
+        self.results_text.insert(tk.END, f"  Loss: {best.loss_pct*100:.2f}% of stake\n", result_color)
+
+        self.results_text.insert(tk.END, "\n" + "=" * 80 + "\n\n")
+
+        if len(opportunities) > 1:
+            self.results_text.insert(
+                tk.END,
+                f"\nAll {len(opportunities)} Opportunities (sorted by loss):\n",
+                "header"
+            )
+            self.results_text.insert(tk.END, "-" * 80 + "\n")
+
+            sorted_opps = sorted(opportunities, key=lambda x: x.loss_pct)
+
+            for i, opp in enumerate(sorted_opps[:20], 1):
+                label = "Profit" if opp.loss < 0 else "Loss"
+                self.results_text.insert(tk.END, f"\n#{i}. {opp.event}\n")
+                self.results_text.insert(
+                    tk.END,
+                    f"   {opp.qual_book}: {opp.selection} @ {opp.qual_odds:+} | "
+                    f"{opp.hedge_book}: {opp.opposite} @ {opp.hedge_odds:+}\n"
+                )
+                self.results_text.insert(
+                    tk.END,
+                    f"   Hedge: ${opp.hedge_stake:.2f} | "
+                    f"{label}: ${abs(opp.loss):.2f} | "
+                    f"Loss: {opp.loss_pct*100:.2f}%\n"
+                )
+
+            if len(opportunities) > 20:
+                self.results_text.insert(
+                    tk.END,
+                    f"\n... and {len(opportunities) - 20} more opportunities\n"
+                )
+
+        self.status_var.set(f"Search complete - Found {len(opportunities)} qualifying hedges")
+        self.logger.debug("[GUI] Qualifying results displayed successfully")
+
     def display_error(self, error_msg):
         """Display error message"""
         self.logger.debug(f"[GUI] Displaying error: {error_msg}")
