@@ -94,6 +94,40 @@ Efficiency: 64.20%
 - `nhl` - NHL Hockey
 - `eurobasketball` - Euroleague Basketball
 
+## Web GUI
+
+A browser-based GUI (`web_gui.py`) exposes the same search and manual calculator as the desktop Tkinter GUI, backed by a Flask app. It's meant to be run on a server (e.g. a VPS) so you can use it from any device.
+
+### Local run
+
+```bash
+pip install -r requirements.txt
+python3 web_gui.py
+```
+
+On first run it prints a generated username/password (also saved to `web_gui_auth.json`, which is gitignored). Open `http://localhost:8080` and log in with those credentials. Set `WEBGUI_USER`/`WEBGUI_PASSWORD` env vars to pick your own credentials instead.
+
+The API key is entered in the browser and kept only in that browser's `localStorage` — it is never written to disk on the server. Selected sports/books can optionally be saved server-side via "Save Sports/Books" (stored in `config.json`, same file the CLI/Tkinter GUI use).
+
+### Production deployment (systemd + gunicorn)
+
+```bash
+# on the server
+git clone https://github.com/louaih/bonus-hedge.git /opt/bonus-hedge
+cd /opt/bonus-hedge
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# generate credentials once so the systemd service is reproducible
+WEBGUI_USER=admin WEBGUI_PASSWORD=$(openssl rand -base64 18) .venv/bin/python3 -c "import web_gui"
+
+sudo cp deploy/bonus-hedge-web.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now bonus-hedge-web
+```
+
+The service runs gunicorn bound to `0.0.0.0:8080` — since the app is guarded only by HTTP Basic Auth and no TLS, treat the port like an internal admin panel: put it behind a firewall rule (only your IP) or a reverse proxy with HTTPS if it needs to be reachable from the open internet.
+
 ## How It Works
 
 1. **Region Detection**: The tool automatically detects which API regions to query based on the sportsbooks you specify

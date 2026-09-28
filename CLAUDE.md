@@ -21,23 +21,28 @@ python3 main.py \
     --min-eff 0.0
 ```
 
-### GUI
+### GUI (desktop)
 ```bash
 python3 gui.py
 ```
 
-### Dependencies
-Only one external dependency:
+### Web GUI
 ```bash
-pip install requests
+pip install -r requirements.txt
+python3 web_gui.py       # http://localhost:8080, credentials printed on first run
 ```
+See README.md "Web GUI" section for the systemd/gunicorn deployment used on the VPS.
+
+### Dependencies
+CLI/Tkinter GUI need only `requests`; the web GUI additionally needs `flask` and `gunicorn` (see `requirements.txt`).
 
 ## Architecture
 
-Two entry points, one shared core:
+Three entry points, one shared core:
 
-- **`main.py`** — core logic + CLI. Can be imported by `gui.py`.
+- **`main.py`** — core logic + CLI. Can be imported by `gui.py` and `web_gui.py`.
 - **`gui.py`** — Tkinter GUI that calls into `main.py`'s functions directly (`collect_all_odds`, `find_all_opportunities`). Runs searches on a background thread with a progress callback.
+- **`web_gui.py`** — Flask app exposing the same functions over HTTP (`/api/search`, `/api/calc`, `/api/config`). Each search runs in a background thread; the browser polls `/api/search/<job_id>` for progress and results. Gated by HTTP Basic Auth since it's meant to run on an open VPS port.
 
 ### Core data flow (main.py)
 

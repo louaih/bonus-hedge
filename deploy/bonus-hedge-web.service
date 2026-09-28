@@ -1,0 +1,13 @@
+[Unit]
+Description=Bonus Hedge Finder web GUI
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bonus-hedge
+ExecStart=/opt/bonus-hedge/.venv/bin/gunicorn -w 2 -b 0.0.0.0:8080 --timeout 120 web_gui:app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

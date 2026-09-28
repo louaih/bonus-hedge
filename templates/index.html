@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonus Hedge Finder</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Bonus Hedge Finder</h1>
+
+  <section class="card">
+    <div class="row">
+      <label>Mode</label>
+      <div class="segmented" id="mode-toggle">
+        <button type="button" class="seg active" data-mode="bonus">Bonus Bet</button>
+        <button type="button" class="seg" data-mode="qualifying">Qualifying Bet</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="api-key">API Key</label>
+      <input id="api-key" type="password" placeholder="The Odds API key (stored only in this browser)">
+    </div>
+
+    <div class="row">
+      <label id="bonus-book-label" for="bonus-book">Bonus Book</label>
+      <select id="bonus-book"></select>
+    </div>
+
+    <div class="row">
+      <label for="stake">Stake ($)</label>
+      <input id="stake" type="number" value="250" min="1" step="1">
+    </div>
+
+    <div class="row">
+      <label id="threshold-label" for="threshold">Min Efficiency (%)</label>
+      <input id="threshold" type="number" value="0" min="0" max="100" step="1">
+    </div>
+
+    <p class="hint">Each sport/region takes ~15-30s to fetch. Fewer selections = faster results.</p>
+  </section>
+
+  <section class="card">
+    <h2>Sports</h2>
+    <div id="sports-list" class="checkbox-grid"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-header">
+      <h2>Hedge Books</h2>
+      <div class="btn-group">
+        <button type="button" id="books-all" class="btn small">Select All</button>
+        <button type="button" id="books-none" class="btn small">Deselect All</button>
+      </div>
+    </div>
+    <div id="books-list" class="checkbox-grid"></div>
+  </section>
+
+  <section class="card actions">
+    <button id="find-btn" class="btn primary">Find Hedges</button>
+    <button id="save-config-btn" class="btn">Save Sports/Books</button>
+    <span id="status" class="status"></span>
+  </section>
+
+  <section class="card">
+    <h2>Manual Calculator</h2>
+    <div class="row manual-row">
+      <label>Stake ($)</label>
+      <input id="m-stake" type="number" value="100">
+      <label>Your odds</label>
+      <input id="m-odds-a" type="text" value="+200">
+      <label>Hedge odds</label>
+      <input id="m-odds-b" type="text" value="-250">
+      <button id="m-calc-btn" class="btn">Calculate</button>
+    </div>
+    <pre id="manual-result" class="mono"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Results</h2>
+    <div id="progress-wrap" class="progress-wrap hidden">
+      <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+      <span id="progress-label"></span>
+    </div>
+    <pre id="results" class="mono">Ready.</pre>
+  </section>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
