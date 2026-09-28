@@ -61,11 +61,18 @@ Efficiency: 64.20%
 | Parameter | Required | Description | Default |
 |-----------|----------|-------------|---------|
 | `--api-key` | ✅ | Your The Odds API key | - |
+| `--mode` | ❌ | `bonus`, `alt_bonus`, or `qualifying` (see below) | `bonus` |
 | `--bonus-book` | ✅ | Sportsbook where you have the bonus bet | - |
 | `--books` | ✅ | Comma-separated list of books to hedge on | - |
 | `--sports` | ❌ | Comma-separated list of sports to check | `nba,ncaab` |
-| `--stake` | ❌| Bonus bet amount in dollars | `250` |
-| `--min-eff` | ❌ | Minimum efficiency threshold (0.0 to 1.0) | `0.0` |
+| `--stake` | ❌| Bonus/qualifying bet amount in dollars | `250` |
+| `--min-eff` | ❌ | Minimum efficiency threshold, `bonus`/`alt_bonus` mode (0.0 to 1.0) | `0.0` |
+| `--max-loss` | ❌ | Max acceptable loss as a fraction of stake, `qualifying` mode | `1.0` |
+
+**Modes:**
+- `bonus` — standard free bet: a win pays out only the winnings (the stake itself is forfeited by the book).
+- `alt_bonus` — a bonus/free bet variant where a win pays out the stake as well as the winnings (nothing is ever at risk either way, but a win returns the full decimal payout). Sizes the hedge like a qualifying bet but tracks the guaranteed outcome as profit rather than loss, since it's still bonus money.
+- `qualifying` — a real cash bet: hedges to minimize guaranteed loss (or find a true arbitrage) since your own stake is at risk.
 
 ### Supported Sportsbooks
 

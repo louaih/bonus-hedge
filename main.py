@@ -194,6 +194,30 @@ def calculate_hedge(stake: float, bonus_odds: float, hedge_odds: float) -> Tuple
     return hedge, profit, efficiency
 
 
+def calculate_alt_bonus_hedge(stake: float, bonus_odds: float, hedge_odds: float) -> Tuple[float, float, float]:
+    """
+    Calculate hedge stake, profit, and efficiency for an "Alt Bonus" bet:
+    a bonus/free bet where, unlike a standard free bet, a win pays out the
+    stake as well as the winnings (nothing is at risk either way, so the
+    full payout counts as profit). Sizes the hedge like a qualifying bet
+    (hedge = stake * dA / dB) since the win side now returns the full
+    decimal payout, but the guaranteed value is still tracked as profit
+    against the bonus stake rather than as a loss against a cash stake.
+
+    Returns:
+        (hedge_stake, profit, efficiency)
+    """
+    dA = american_to_decimal(bonus_odds)
+    dB = american_to_decimal(hedge_odds)
+    hedge = stake * dA / dB
+    profit = min(
+        stake * dA - hedge,
+        hedge * (dB - 1),
+    )
+    efficiency = profit / stake
+    return hedge, profit, efficiency
+
+
 def calculate_qualifying_hedge(stake: float, qual_odds: float, hedge_odds: float) -> Tuple[float, float, float]:
     """
     Calculate optimal hedge for a qualifying (cash) bet.
@@ -486,28 +510,30 @@ def log_collection_summary(rows: List[OddsRow]):
 def find_hedge_for_bonus(
     bonus_row: OddsRow,
     all_rows: List[OddsRow],
-    stake: float
+    stake: float,
+    calc_fn=calculate_hedge
 ) -> List[HedgeOpportunity]:
     """
     Find all possible hedge opportunities for a given bonus bet
-    
+
     Args:
         bonus_row: The bonus bet to hedge
         all_rows: All available odds
         stake: Bonus bet stake amount
-        
+        calc_fn: hedge calculation function, e.g. calculate_hedge or calculate_alt_bonus_hedge
+
     Returns:
         List of HedgeOpportunity objects
     """
     opportunities = []
-    
+
     for row in all_rows:
         # Must be same event, opposite selection, different book
-        if (row.event == bonus_row.event and 
-            row.selection == bonus_row.opposite and 
+        if (row.event == bonus_row.event and
+            row.selection == bonus_row.opposite and
             row.book != bonus_row.book):
-            
-            hedge_stake, profit, efficiency = calculate_hedge(
+
+            hedge_stake, profit, efficiency = calc_fn(
                 stake, bonus_row.odds, row.odds
             )
             
@@ -531,33 +557,35 @@ def find_all_opportunities(
     rows: List[OddsRow],
     bonus_book: str,
     stake: float,
-    min_efficiency: float
+    min_efficiency: float,
+    calc_fn=calculate_hedge
 ) -> List[HedgeOpportunity]:
     """
     Find all hedge opportunities that meet minimum efficiency
-    
+
     Args:
         rows: All available odds
         bonus_book: The book offering the bonus
         stake: Bonus bet stake amount
         min_efficiency: Minimum efficiency threshold (0.0 to 1.0)
-        
+        calc_fn: hedge calculation function, e.g. calculate_hedge or calculate_alt_bonus_hedge
+
     Returns:
         List of HedgeOpportunity objects meeting criteria
     """
     logger.debug(f"\n[SEARCH] Looking for hedges with bonus_book='{bonus_book}'")
-    
+
     bonus_rows = [r for r in rows if r.book == bonus_book]
     logger.debug(f"[SEARCH] Found {len(bonus_rows)} bonus opportunities")
-    
+
     if len(bonus_rows) == 0:
         logger.debug(f"[SEARCH] WARNING - No odds found for bonus book '{bonus_book}'")
         logger.debug(f"[SEARCH] Available books in data: {set(r.book for r in rows)}")
-    
+
     all_opportunities = []
-    
+
     for bonus_row in bonus_rows:
-        opportunities = find_hedge_for_bonus(bonus_row, rows, stake)
+        opportunities = find_hedge_for_bonus(bonus_row, rows, stake, calc_fn=calc_fn)
         all_opportunities.extend(opportunities)
     
     # Filter by minimum efficiency
@@ -743,6 +771,7 @@ def log_no_qualifying_opportunities():
 def log_manual_results(stake: float, odds_a: float, odds_b: float):
     """Calculate and display hedge results for manually supplied odds (no API needed)"""
     bonus_hedge, bonus_profit, bonus_eff = calculate_hedge(stake, odds_a, odds_b)
+    alt_bonus_hedge, alt_bonus_profit, alt_bonus_eff = calculate_alt_bonus_hedge(stake, odds_a, odds_b)
     qual_hedge, qual_loss, qual_loss_pct = calculate_qualifying_hedge(stake, odds_a, odds_b)
 
     logger.console("\n" + "="*80)
@@ -755,6 +784,11 @@ def log_manual_results(stake: float, odds_a: float, odds_b: float):
     logger.console(f"  Hedge stake:   ${bonus_hedge:.2f}")
     logger.console(f"  Locked profit: ${bonus_profit:.2f}")
     logger.console(f"  Efficiency:    {bonus_eff*100:.2f}%")
+    logger.console("")
+    logger.console("ALT BONUS MODE (stake included in payout on a win):")
+    logger.console(f"  Hedge stake:   ${alt_bonus_hedge:.2f}")
+    logger.console(f"  Locked profit: ${alt_bonus_profit:.2f}")
+    logger.console(f"  Efficiency:    {alt_bonus_eff*100:.2f}%")
     logger.console("")
     logger.console("QUALIFYING BET MODE:")
     logger.console(f"  Hedge stake: ${qual_hedge:.2f}")
@@ -772,14 +806,15 @@ def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Find optimal bonus bet hedges and qualifying bet hedges")
     parser.add_argument("--api-key", default=None, help="API key for odds service")
-    parser.add_argument("--mode", choices=["bonus", "qualifying"], default="bonus",
-                        help="bonus: free bet hedging; qualifying: cash bet hedge to minimize loss")
+    parser.add_argument("--mode", choices=["bonus", "alt_bonus", "qualifying"], default="bonus",
+                        help="bonus: standard free bet hedging; alt_bonus: bonus bet where a win pays out the "
+                             "stake as well as the winnings; qualifying: cash bet hedge to minimize loss")
     parser.add_argument("--bonus-book", default=None,
-                        help="Book offering the bonus (bonus mode) or where qualifying bet must go (qualifying mode)")
+                        help="Book offering the bonus (bonus/alt_bonus mode) or where qualifying bet must go (qualifying mode)")
     parser.add_argument("--books", default=None, help="Comma-separated list of books to hedge with")
     parser.add_argument("--sports", default="nba,ncaab", help="Comma-separated list of sports")
     parser.add_argument("--stake", type=float, default=250, help="Bet stake amount in dollars")
-    parser.add_argument("--min-eff", type=float, default=0.0, help="Min efficiency threshold (bonus mode, 0.0-1.0)")
+    parser.add_argument("--min-eff", type=float, default=0.0, help="Min efficiency threshold (bonus/alt_bonus mode, 0.0-1.0)")
     parser.add_argument("--max-loss", type=float, default=1.0,
                         help="Max acceptable loss as fraction of stake (qualifying mode, e.g. 0.05 = 5%%)")
     parser.add_argument("--calc", action="store_true",
@@ -815,7 +850,7 @@ def main():
     logger.debug(f"Hedge books: {args.books}")
     logger.debug(f"Sports: {args.sports}")
     logger.debug(f"Stake: ${args.stake}")
-    if args.mode == "bonus":
+    if args.mode in ("bonus", "alt_bonus"):
         logger.debug(f"Min efficiency: {args.min_eff*100}%")
     else:
         logger.debug(f"Max loss: {args.max_loss*100}%")
@@ -850,8 +885,9 @@ def main():
     log_collection_summary(odds_rows)
     
     # Find opportunities and display results
-    if args.mode == "bonus":
-        opportunities = find_all_opportunities(odds_rows, bonus_book, args.stake, args.min_eff)
+    if args.mode in ("bonus", "alt_bonus"):
+        calc_fn = calculate_alt_bonus_hedge if args.mode == "alt_bonus" else calculate_hedge
+        opportunities = find_all_opportunities(odds_rows, bonus_book, args.stake, args.min_eff, calc_fn=calc_fn)
         if not opportunities:
             log_no_opportunities()
             return

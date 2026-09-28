@@ -85,7 +85,7 @@ function getChecked(group) {
 function setMode(mode) {
   state.mode = mode;
   document.querySelectorAll("#mode-toggle .seg").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
-  if (mode === "bonus") {
+  if (mode === "bonus" || mode === "alt_bonus") {
     $("bonus-book-label").textContent = "Bonus Book";
     $("threshold-label").textContent = "Min Efficiency (%)";
   } else {
@@ -116,10 +116,11 @@ async function runManualCalc() {
     $("manual-result").textContent = "Error: " + data.error;
     return;
   }
-  const b = data.bonus, q = data.qualifying;
+  const b = data.bonus, ab = data.alt_bonus, q = data.qualifying;
   const qLabel = q.loss < 0 ? "Profit" : "Loss";
   $("manual-result").textContent =
     `Bonus:      Hedge $${b.hedge_stake.toFixed(2)}  |  Profit $${b.profit.toFixed(2)}  |  Efficiency ${b.efficiency_pct.toFixed(2)}%\n` +
+    `Alt Bonus:  Hedge $${ab.hedge_stake.toFixed(2)}  |  Profit $${ab.profit.toFixed(2)}  |  Efficiency ${ab.efficiency_pct.toFixed(2)}%\n` +
     `Qualifying: Hedge $${q.hedge_stake.toFixed(2)}  |  ${qLabel} $${Math.abs(q.loss).toFixed(2)}  |  Loss ${q.loss_pct.toFixed(2)}%`;
 }
 
@@ -198,9 +199,11 @@ function renderResults(result) {
   const lines = [];
   lines.push(`Analyzed ${result.odds_count} odds entries, ${result.opportunity_count} opportunities found.\n`);
 
+  const isBonusLike = result.mode === "bonus" || result.mode === "alt_bonus";
+
   if (!result.best) {
     setStatus("Search complete - no opportunities found");
-    lines.push(result.mode === "bonus" ? "No valid bonus hedge opportunities found." : "No valid qualifying hedge opportunities found.");
+    lines.push(isBonusLike ? "No valid bonus hedge opportunities found." : "No valid qualifying hedge opportunities found.");
     $("results").textContent = lines.join("\n");
     return;
   }
@@ -208,9 +211,9 @@ function renderResults(result) {
   setStatus(`Search complete - ${result.opportunity_count} opportunities`);
   const best = result.best;
 
-  if (result.mode === "bonus") {
+  if (isBonusLike) {
     lines.push("=".repeat(70));
-    lines.push("BEST BONUS HEDGE OPPORTUNITY");
+    lines.push(result.mode === "alt_bonus" ? "BEST ALT BONUS HEDGE OPPORTUNITY" : "BEST BONUS HEDGE OPPORTUNITY");
     lines.push("=".repeat(70));
     lines.push(`Event: ${best.event}`);
     lines.push(`Bonus (${fmtBook(best.bonus_book)}): ${best.selection} @ ${americanFmt(best.bonus_odds)}`);

@@ -57,10 +57,16 @@ parse_arguments()
 
 ### Key types (main.py ~line 98)
 - `OddsRow` — a single odds line: event, selection, opposite side, book, odds (American)
-- `HedgeOpportunity` — a matched pair: bonus book/odds, hedge book/odds, calculated stake, profit, efficiency
+- `HedgeOpportunity` — a matched pair: bonus book/odds, hedge book/odds, calculated stake, profit, efficiency (used by both `bonus` and `alt_bonus` modes)
+
+### Modes
+`find_all_opportunities()`/`find_hedge_for_bonus()` take a `calc_fn` (defaults to `calculate_hedge`) so `bonus` and `alt_bonus` share all the matching/filtering logic and only differ in which pricing function computes `(hedge_stake, profit, efficiency)`:
+- `calculate_hedge` — standard free bet: win pays winnings only.
+- `calculate_alt_bonus_hedge` — a win pays the stake back too (full decimal payout), so it sizes the hedge like `calculate_qualifying_hedge` (`hedge = stake * dA / dB`) but reports the guaranteed outcome as profit, not loss, since it's still bonus money.
+- `calculate_qualifying_hedge` — real cash bet, separate `QualifyingHedgeOpportunity`/`find_qualifying_opportunities` path since a loss costs the actual stake.
 
 ### Efficiency metric
-`efficiency = guaranteed_profit / bonus_stake` (0.0–1.0). Typical good conversions are 70–90%.
+`efficiency = guaranteed_profit / bonus_stake` (0.0–1.0). Typical good conversions are 70–90% for `bonus`, and can be much higher for `alt_bonus` since the stake itself becomes profit.
 
 ### Sportsbook regions
 - **US**: fanduel, draftkings, williamhill_us (caesars), betrivers, fanatics, betmgm

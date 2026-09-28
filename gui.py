@@ -26,6 +26,7 @@ from main import (
     find_qualifying_opportunities,
     select_best_qualifying_opportunity,
     calculate_hedge,
+    calculate_alt_bonus_hedge,
     calculate_qualifying_hedge,
     Logger,
 )
@@ -40,7 +41,7 @@ class HedgeFinderGUI:
         # Setup logger for GUI
         self.logger = Logger("debug.log")
 
-        # Mode: "bonus" or "qualifying"
+        # Mode: "bonus", "alt_bonus", or "qualifying"
         self.mode_var = tk.StringVar(value="bonus")
 
         # Load configuration
@@ -149,8 +150,10 @@ class HedgeFinderGUI:
         mode_frame.grid(row=0, column=1, sticky=tk.W, padx=(10, 0), pady=5)
         ttk.Radiobutton(mode_frame, text="Bonus Bet", variable=self.mode_var,
                         value="bonus", command=self.on_mode_change).grid(row=0, column=0, padx=(0, 15))
+        ttk.Radiobutton(mode_frame, text="Alt Bonus Bet", variable=self.mode_var,
+                        value="alt_bonus", command=self.on_mode_change).grid(row=0, column=1, padx=(0, 15))
         ttk.Radiobutton(mode_frame, text="Qualifying Bet", variable=self.mode_var,
-                        value="qualifying", command=self.on_mode_change).grid(row=0, column=1)
+                        value="qualifying", command=self.on_mode_change).grid(row=0, column=2)
 
         # API Key
         ttk.Label(config_frame, text="API Key:").grid(row=1, column=0, sticky=tk.W, pady=5)
@@ -198,7 +201,7 @@ class HedgeFinderGUI:
 
     def on_mode_change(self):
         """Update labels when mode radio button changes"""
-        if self.mode_var.get() == "bonus":
+        if self.mode_var.get() in ("bonus", "alt_bonus"):
             self.source_book_label.config(text="Bonus Book:")
             self.threshold_label.config(text="Min Efficiency (%):")
         else:
@@ -320,8 +323,11 @@ class HedgeFinderGUI:
         self.manual_bonus_label = ttk.Label(manual_frame, text="", font=('Courier', 9))
         self.manual_bonus_label.grid(row=1, column=0, sticky=tk.W, pady=(6, 0))
 
+        self.manual_alt_bonus_label = ttk.Label(manual_frame, text="", font=('Courier', 9))
+        self.manual_alt_bonus_label.grid(row=2, column=0, sticky=tk.W)
+
         self.manual_qual_label = ttk.Label(manual_frame, text="", font=('Courier', 9))
-        self.manual_qual_label.grid(row=2, column=0, sticky=tk.W)
+        self.manual_qual_label.grid(row=3, column=0, sticky=tk.W)
 
     def run_manual_calc(self):
         """Compute and display hedge results from manually entered odds"""
@@ -334,10 +340,14 @@ class HedgeFinderGUI:
             return
 
         bonus_hedge, bonus_profit, bonus_eff = calculate_hedge(stake, odds_a, odds_b)
+        alt_bonus_hedge, alt_bonus_profit, alt_bonus_eff = calculate_alt_bonus_hedge(stake, odds_a, odds_b)
         qual_hedge, qual_loss, qual_loss_pct = calculate_qualifying_hedge(stake, odds_a, odds_b)
 
         self.manual_bonus_label.config(
             text=f"Bonus:      Hedge ${bonus_hedge:.2f}  |  Profit ${bonus_profit:.2f}  |  Efficiency {bonus_eff*100:.2f}%"
+        )
+        self.manual_alt_bonus_label.config(
+            text=f"Alt Bonus:  Hedge ${alt_bonus_hedge:.2f}  |  Profit ${alt_bonus_profit:.2f}  |  Efficiency {alt_bonus_eff*100:.2f}%"
         )
         qlabel = "Profit" if qual_loss < 0 else "Loss"
         self.manual_qual_label.config(
@@ -467,7 +477,7 @@ class HedgeFinderGUI:
             if threshold < 0 or threshold > 100:
                 raise ValueError()
         except ValueError:
-            if self.mode_var.get() == "bonus":
+            if self.mode_var.get() in ("bonus", "alt_bonus"):
                 messagebox.showerror("Error", "Min efficiency must be between 0 and 100")
             else:
                 messagebox.showerror("Error", "Max loss must be between 0 and 100")
@@ -656,8 +666,9 @@ class HedgeFinderGUI:
             self.logger.debug("[GUI] Finding opportunities")
 
             # Find opportunities
-            if mode == "bonus":
-                opportunities = find_all_opportunities(odds_rows, bonus_book, stake, threshold)
+            if mode in ("bonus", "alt_bonus"):
+                calc_fn = calculate_alt_bonus_hedge if mode == "alt_bonus" else calculate_hedge
+                opportunities = find_all_opportunities(odds_rows, bonus_book, stake, threshold, calc_fn=calc_fn)
             else:
                 opportunities = find_qualifying_opportunities(odds_rows, bonus_book, stake, threshold)
 
@@ -669,9 +680,9 @@ class HedgeFinderGUI:
                 return
 
             # Display results
-            if mode == "bonus":
+            if mode in ("bonus", "alt_bonus"):
                 self.root.after(0, lambda: self.display_results(
-                    opportunities, stake, bonus_book, len(odds_rows)
+                    opportunities, stake, bonus_book, len(odds_rows), mode
                 ))
             else:
                 self.root.after(0, lambda: self.display_qualifying_results(
@@ -687,9 +698,10 @@ class HedgeFinderGUI:
             self.logger.debug("[GUI] run_search finally block")
             self.root.after(0, self.search_complete)
     
-    def display_results(self, opportunities, stake, bonus_book, odds_count):
+    def display_results(self, opportunities, stake, bonus_book, odds_count, mode="bonus"):
         """Display search results in the text area"""
         self.logger.debug(f"[GUI] Displaying results: {len(opportunities)} opportunities")
+        title = "BEST ALT BONUS HEDGE OPPORTUNITY" if mode == "alt_bonus" else "BEST BONUS HEDGE OPPORTUNITY"
         
         self.results_text.delete(1.0, tk.END)
         
@@ -715,7 +727,7 @@ class HedgeFinderGUI:
         best = select_best_opportunity(opportunities)
         
         self.results_text.insert(tk.END, "=" * 80 + "\n", "header")
-        self.results_text.insert(tk.END, "BEST BONUS HEDGE OPPORTUNITY\n", "header")
+        self.results_text.insert(tk.END, f"{title}\n", "header")
         self.results_text.insert(tk.END, "=" * 80 + "\n\n", "header")
         
         self.results_text.insert(tk.END, f"Event: {best.event}\n\n", "event")

@@ -37,6 +37,7 @@ from main import (
     find_qualifying_opportunities,
     select_best_qualifying_opportunity,
     calculate_hedge,
+    calculate_alt_bonus_hedge,
     calculate_qualifying_hedge,
 )
 
@@ -135,9 +136,10 @@ def run_search_job(job_id: str, params: dict) -> None:
             progress_callback=progress_cb,
         )
 
-        if params["mode"] == "bonus":
+        if params["mode"] in ("bonus", "alt_bonus"):
+            calc_fn = calculate_alt_bonus_hedge if params["mode"] == "alt_bonus" else calculate_hedge
             opportunities = find_all_opportunities(
-                odds_rows, params["bonus_book"], params["stake"], params["threshold"]
+                odds_rows, params["bonus_book"], params["stake"], params["threshold"], calc_fn=calc_fn
             )
             best = select_best_opportunity(opportunities)
             sorted_opps = sorted(opportunities, key=lambda o: o.efficiency, reverse=True)
@@ -209,10 +211,12 @@ def calc():
         return jsonify({"error": "stake, odds_a, odds_b must be numbers"}), 400
 
     bonus_hedge, bonus_profit, bonus_eff = calculate_hedge(stake, odds_a, odds_b)
+    alt_bonus_hedge, alt_bonus_profit, alt_bonus_eff = calculate_alt_bonus_hedge(stake, odds_a, odds_b)
     qual_hedge, qual_loss, qual_loss_pct = calculate_qualifying_hedge(stake, odds_a, odds_b)
 
     return jsonify({
         "bonus": {"hedge_stake": bonus_hedge, "profit": bonus_profit, "efficiency_pct": bonus_eff * 100},
+        "alt_bonus": {"hedge_stake": alt_bonus_hedge, "profit": alt_bonus_profit, "efficiency_pct": alt_bonus_eff * 100},
         "qualifying": {"hedge_stake": qual_hedge, "loss": qual_loss, "loss_pct": qual_loss_pct * 100},
     })
 
@@ -236,8 +240,8 @@ def start_search():
         return jsonify({"error": "Select at least one sport"}), 400
     if not books:
         return jsonify({"error": "Select at least one hedge book"}), 400
-    if mode not in ("bonus", "qualifying"):
-        return jsonify({"error": "mode must be 'bonus' or 'qualifying'"}), 400
+    if mode not in ("bonus", "alt_bonus", "qualifying"):
+        return jsonify({"error": "mode must be 'bonus', 'alt_bonus', or 'qualifying'"}), 400
 
     try:
         stake = float(body.get("stake", 0))
