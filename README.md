@@ -111,20 +111,19 @@ The API key is entered in the browser and kept only in that browser's `localStor
 
 ### Production deployment (systemd + gunicorn)
 
+Run on the server as root (installs into `/opt/bonus-hedge`, sets up a venv, and enables a systemd service on port 8080):
+
 ```bash
-# on the server
-git clone https://github.com/louaih/bonus-hedge.git /opt/bonus-hedge
-cd /opt/bonus-hedge
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-
-# generate credentials once so the systemd service is reproducible
-WEBGUI_USER=admin WEBGUI_PASSWORD=$(openssl rand -base64 18) .venv/bin/python3 -c "import web_gui"
-
-sudo cp deploy/bonus-hedge-web.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now bonus-hedge-web
+curl -fsSL https://raw.githubusercontent.com/louaih/bonus-hedge/claude/web-gui-vps-deploy-snxay6/deploy/deploy.sh | bash
 ```
+
+Or, if you've already cloned the repo on the server:
+
+```bash
+cd /opt/bonus-hedge && bash deploy/deploy.sh
+```
+
+Re-running the script later pulls the latest commit on that branch and restarts the service — use it to deploy updates too. Login credentials are generated on first run and printed at the end (also saved to `/opt/bonus-hedge/web_gui_auth.json`); set `WEBGUI_USER`/`WEBGUI_PASSWORD` env vars before running it to pick your own instead.
 
 The service runs gunicorn bound to `0.0.0.0:8080` — since the app is guarded only by HTTP Basic Auth and no TLS, treat the port like an internal admin panel: put it behind a firewall rule (only your IP) or a reverse proxy with HTTPS if it needs to be reachable from the open internet.
 
