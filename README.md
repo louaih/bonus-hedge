@@ -84,6 +84,12 @@ Efficiency: 64.20%
 - `fliff` - Fliff
 - `hardrockbet` - Hard Rock Bet
 
+**US Exchange Region (`us_ex`):**
+- `novig` - Novig
+- `polymarket` - Polymarket
+
+Exchange-style books publish a single best price per side rather than a traditional fixed line, but The Odds API normalizes them into the same `{name, price}` shape as every other bookmaker, so they work as both bonus/qualifying books and hedge books without any special handling. Including one adds an extra API call per sport (one per region queried).
+
 ### Supported Sports
 
 - `nba` - NBA Basketball

@@ -60,6 +60,10 @@ BOOK_ALIASES = {
     "betparx": "betparx",
     "fliff": "fliff",
     "hardrockbet": "hardrockbet",
+
+    # us_ex (exchanges / prediction markets)
+    "novig": "novig",
+    "polymarket": "polymarket",
 }
 
 US_BOOKS = {
@@ -77,6 +81,11 @@ US2_BOOKS = {
     "betparx",
     "fliff",
     "hardrockbet",
+}
+
+US_EX_BOOKS = {
+    "novig",
+    "polymarket",
 }
 
 SPORT_KEYS = {
@@ -153,6 +162,8 @@ def get_regions_needed(all_books: set[str]) -> list[str]:
         regions.append("us")
     if all_books & US2_BOOKS:
         regions.append("us2")
+    if all_books & US_EX_BOOKS:
+        regions.append("us_ex")
     return regions if regions else ["us"]
 
 

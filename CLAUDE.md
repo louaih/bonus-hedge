@@ -65,8 +65,9 @@ parse_arguments()
 ### Sportsbook regions
 - **US**: fanduel, draftkings, williamhill_us (caesars), betrivers, fanatics, betmgm
 - **US2**: ballybet, espnbet, betparx, fliff, hardrockbet
+- **US_EX** (exchanges/prediction markets): novig, polymarket
 
-Region is auto-detected from the books list. Cross-region searches make API calls to both endpoints.
+Region is auto-detected from the books list. Cross-region searches make one API call per region needed. Exchange books come back through the same `/v4/odds` endpoint and outcome shape (`{name, price}`) as fixed-odds books — no special parsing required.
 
 ## Configuration
 
