@@ -61,11 +61,18 @@ Efficiency: 64.20%
 | Parameter | Required | Description | Default |
 |-----------|----------|-------------|---------|
 | `--api-key` | ✅ | Your The Odds API key | - |
+| `--mode` | ❌ | `bonus`, `alt_bonus`, or `qualifying` (see below) | `bonus` |
 | `--bonus-book` | ✅ | Sportsbook where you have the bonus bet | - |
 | `--books` | ✅ | Comma-separated list of books to hedge on | - |
 | `--sports` | ❌ | Comma-separated list of sports to check | `nba,ncaab` |
-| `--stake` | ❌| Bonus bet amount in dollars | `250` |
-| `--min-eff` | ❌ | Minimum efficiency threshold (0.0 to 1.0) | `0.0` |
+| `--stake` | ❌| Bonus/qualifying bet amount in dollars | `250` |
+| `--min-eff` | ❌ | Minimum efficiency threshold, `bonus`/`alt_bonus` mode (0.0 to 1.0) | `0.0` |
+| `--max-loss` | ❌ | Max acceptable loss as a fraction of stake, `qualifying` mode | `1.0` |
+
+**Modes:**
+- `bonus` — standard free bet: a win pays out only the winnings (the stake itself is forfeited by the book).
+- `alt_bonus` — a bonus/free bet variant where a win pays out the stake as well as the winnings (nothing is ever at risk either way, but a win returns the full decimal payout). Sizes the hedge like a qualifying bet but tracks the guaranteed outcome as profit rather than loss, since it's still bonus money.
+- `qualifying` — a real cash bet: hedges to minimize guaranteed loss (or find a true arbitrage) since your own stake is at risk.
 
 ### Supported Sportsbooks
 
@@ -84,6 +91,12 @@ Efficiency: 64.20%
 - `fliff` - Fliff
 - `hardrockbet` - Hard Rock Bet
 
+**US Exchange Region (`us_ex`):**
+- `novig` - Novig
+- `polymarket` - Polymarket
+
+Exchange-style books publish a single best price per side rather than a traditional fixed line, but The Odds API normalizes them into the same `{name, price}` shape as every other bookmaker, so they work as both bonus/qualifying books and hedge books without any special handling. Including one adds an extra API call per sport (one per region queried).
+
 ### Supported Sports
 
 - `nba` - NBA Basketball
@@ -93,6 +106,39 @@ Efficiency: 64.20%
 - `mlb` - MLB Baseball
 - `nhl` - NHL Hockey
 - `eurobasketball` - Euroleague Basketball
+
+## Web GUI
+
+A browser-based GUI (`web_gui.py`) exposes the same search and manual calculator as the desktop Tkinter GUI, backed by a Flask app. It's meant to be run on a server (e.g. a VPS) so you can use it from any device.
+
+### Local run
+
+```bash
+pip install -r requirements.txt
+python3 web_gui.py
+```
+
+On first run it prints a generated username/password (also saved to `web_gui_auth.json`, which is gitignored). Open `http://localhost:8080` and log in with those credentials. Set `WEBGUI_USER`/`WEBGUI_PASSWORD` env vars to pick your own credentials instead.
+
+The API key is entered in the browser and kept only in that browser's `localStorage` — it is never written to disk on the server. Selected sports/books can optionally be saved server-side via "Save Sports/Books" (stored in `config.json`, same file the CLI/Tkinter GUI use).
+
+### Production deployment (systemd + gunicorn)
+
+Run on the server as root (installs into `/opt/bonus-hedge`, sets up a venv, and enables a systemd service on port 8080):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/louaih/bonus-hedge/claude/web-gui-vps-deploy-snxay6/deploy/deploy.sh | bash
+```
+
+Or, if you've already cloned the repo on the server:
+
+```bash
+cd /opt/bonus-hedge && bash deploy/deploy.sh
+```
+
+Re-running the script later pulls the latest commit on that branch and restarts the service — use it to deploy updates too. Login credentials are generated on first run and printed at the end (also saved to `/opt/bonus-hedge/web_gui_auth.json`); set `WEBGUI_USER`/`WEBGUI_PASSWORD` env vars before running it to pick your own instead.
+
+The service runs gunicorn bound to `0.0.0.0:8080` — since the app is guarded only by HTTP Basic Auth and no TLS, treat the port like an internal admin panel: put it behind a firewall rule (only your IP) or a reverse proxy with HTTPS if it needs to be reachable from the open internet.
 
 ## How It Works
 

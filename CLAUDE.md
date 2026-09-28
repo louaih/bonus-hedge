@@ -21,23 +21,28 @@ python3 main.py \
     --min-eff 0.0
 ```
 
-### GUI
+### GUI (desktop)
 ```bash
 python3 gui.py
 ```
 
-### Dependencies
-Only one external dependency:
+### Web GUI
 ```bash
-pip install requests
+pip install -r requirements.txt
+python3 web_gui.py       # http://localhost:8080, credentials printed on first run
 ```
+See README.md "Web GUI" section for the systemd/gunicorn deployment used on the VPS.
+
+### Dependencies
+CLI/Tkinter GUI need only `requests`; the web GUI additionally needs `flask` and `gunicorn` (see `requirements.txt`).
 
 ## Architecture
 
-Two entry points, one shared core:
+Three entry points, one shared core:
 
-- **`main.py`** — core logic + CLI. Can be imported by `gui.py`.
+- **`main.py`** — core logic + CLI. Can be imported by `gui.py` and `web_gui.py`.
 - **`gui.py`** — Tkinter GUI that calls into `main.py`'s functions directly (`collect_all_odds`, `find_all_opportunities`). Runs searches on a background thread with a progress callback.
+- **`web_gui.py`** — Flask app exposing the same functions over HTTP (`/api/search`, `/api/calc`, `/api/config`). Each search runs in a background thread; the browser polls `/api/search/<job_id>` for progress and results. Gated by HTTP Basic Auth since it's meant to run on an open VPS port.
 
 ### Core data flow (main.py)
 
@@ -52,16 +57,23 @@ parse_arguments()
 
 ### Key types (main.py ~line 98)
 - `OddsRow` — a single odds line: event, selection, opposite side, book, odds (American)
-- `HedgeOpportunity` — a matched pair: bonus book/odds, hedge book/odds, calculated stake, profit, efficiency
+- `HedgeOpportunity` — a matched pair: bonus book/odds, hedge book/odds, calculated stake, profit, efficiency (used by both `bonus` and `alt_bonus` modes)
+
+### Modes
+`find_all_opportunities()`/`find_hedge_for_bonus()` take a `calc_fn` (defaults to `calculate_hedge`) so `bonus` and `alt_bonus` share all the matching/filtering logic and only differ in which pricing function computes `(hedge_stake, profit, efficiency)`:
+- `calculate_hedge` — standard free bet: win pays winnings only.
+- `calculate_alt_bonus_hedge` — a win pays the stake back too (full decimal payout), so it sizes the hedge like `calculate_qualifying_hedge` (`hedge = stake * dA / dB`) but reports the guaranteed outcome as profit, not loss, since it's still bonus money.
+- `calculate_qualifying_hedge` — real cash bet, separate `QualifyingHedgeOpportunity`/`find_qualifying_opportunities` path since a loss costs the actual stake.
 
 ### Efficiency metric
-`efficiency = guaranteed_profit / bonus_stake` (0.0–1.0). Typical good conversions are 70–90%.
+`efficiency = guaranteed_profit / bonus_stake` (0.0–1.0). Typical good conversions are 70–90% for `bonus`, and can be much higher for `alt_bonus` since the stake itself becomes profit.
 
 ### Sportsbook regions
 - **US**: fanduel, draftkings, williamhill_us (caesars), betrivers, fanatics, betmgm
 - **US2**: ballybet, espnbet, betparx, fliff, hardrockbet
+- **US_EX** (exchanges/prediction markets): novig, polymarket
 
-Region is auto-detected from the books list. Cross-region searches make API calls to both endpoints.
+Region is auto-detected from the books list. Cross-region searches make one API call per region needed. Exchange books come back through the same `/v4/odds` endpoint and outcome shape (`{name, price}`) as fixed-odds books — no special parsing required.
 
 ## Configuration
 
