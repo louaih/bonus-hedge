@@ -22,8 +22,29 @@ fi
 
 cd "$APP_DIR"
 
+echo "==> Picking a Python interpreter (need 3.9+)"
+PYTHON_BIN=""
+for candidate in python3.13 python3.12 python3.11 python3.10 python3.9 python3; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    ver="$("$candidate" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
+    major="${ver%%.*}"
+    minor="${ver#*.}"
+    if [ "$major" -eq 3 ] && [ "$minor" -ge 9 ]; then
+      PYTHON_BIN="$candidate"
+      break
+    fi
+  fi
+done
+if [ -z "$PYTHON_BIN" ]; then
+  echo "ERROR: no Python 3.9+ interpreter found (checked python3.9-3.13 and python3)." >&2
+  echo "Install one, e.g. on AlmaLinux/RHEL: dnf install -y python3.11" >&2
+  exit 1
+fi
+echo "    using $PYTHON_BIN ($("$PYTHON_BIN" --version))"
+
 echo "==> Setting up virtualenv"
-python3 -m venv .venv
+rm -rf .venv
+"$PYTHON_BIN" -m venv .venv
 .venv/bin/pip install --quiet --upgrade pip
 .venv/bin/pip install --quiet -r requirements.txt
 
