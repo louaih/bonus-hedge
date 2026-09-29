@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Deploys/updates the Bonus Hedge Finder web GUI on this machine.
 # Run this ON THE VPS (not from your laptop):
-#   curl -fsSL https://raw.githubusercontent.com/louaih/bonus-hedge/claude/web-gui-vps-deploy-snxay6/deploy/deploy.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/louaih/bonus-hedge/main/deploy/deploy.sh | bash
 # or, if you already cloned the repo:
 #   bash deploy/deploy.sh
+#
+# Defaults to the "main" branch. Feature branches used for development get
+# merged and deleted, so pin BRANCH only for testing an unmerged branch,
+# e.g.: BRANCH=some-feature-branch bash deploy.sh
 set -euo pipefail
 
 REPO_URL="https://github.com/louaih/bonus-hedge.git"
-BRANCH="${BRANCH:-claude/web-gui-vps-deploy-snxay6}"
+BRANCH="${BRANCH:-main}"
 APP_DIR="${APP_DIR:-/opt/bonus-hedge}"
 
 if [ -d "$APP_DIR/.git" ]; then

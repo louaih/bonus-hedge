@@ -127,7 +127,7 @@ The API key is entered in the browser and kept only in that browser's `localStor
 Run on the server as root (installs into `/opt/bonus-hedge`, sets up a venv, and enables a systemd service on port 8080):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/louaih/bonus-hedge/claude/web-gui-vps-deploy-snxay6/deploy/deploy.sh | bash
+curl -fsSL https://raw.githubusercontent.com/louaih/bonus-hedge/main/deploy/deploy.sh | bash
 ```
 
 Or, if you've already cloned the repo on the server:
